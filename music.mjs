@@ -7,7 +7,7 @@ function lcg(seed) {
   return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
 }
 
-export function makeTrack({ bpm = 140, tstart = 1.7, fin = 14, duration = 19, seed = 1, events = [] }) {
+export function makeTrack({ bpm = 140, tstart = 1.7, fin = 14, duration = 19, seed = 1, events = [], beatOn = true }) {
   const N = Math.ceil(duration * SR), buf = new Float32Array(N);
   const rnd = lcg(seed * 7919 + 13);
   const beat = 60 / bpm, step = beat / 4;
@@ -37,7 +37,7 @@ export function makeTrack({ bpm = 140, tstart = 1.7, fin = 14, duration = 19, se
   // шаблон мелодии колокольчика, зависит от seed
   const bellSteps = [];
   for (let s = 0; s < 16; s++) bellSteps.push(rnd() < (s % 4 === 2 ? 0.7 : s % 2 === 0 ? 0.45 : 0.18) ? Math.floor(rnd() * BELL.length) : -1);
-  for (let bar = 0; bar < bars; bar++) {
+  for (let bar = 0; beatOn && bar < bars; bar++) {
     for (let s = 0; s < 16; s++) {
       const t = tstart + (bar * 16 + s) * step;
       if (t >= duration - 0.2) break;
@@ -81,7 +81,7 @@ export function makeTrack({ bpm = 140, tstart = 1.7, fin = 14, duration = 19, se
   /* финиш: удар и аккорд на ближайшую долю */
   const ft = Math.ceil(fin / beat) * beat;
   crash(ft, 1.6, 0.6); kick2(ft, 1.3); sub808(ft, F[0], 0.8, 1.2);
-  for (const f of [349, 415, 523, 698]) tone(ft, f, 0.9, 0.9, 3.2);
+  if (beatOn) for (const f of [349, 415, 523, 698]) tone(ft, f, 0.9, 0.9, 3.2);
 
   /* лимитер и запись */
   let peak = 0;

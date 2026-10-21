@@ -15,7 +15,7 @@ if (which === 'all' || which === 'themes') {
     const big = document.createElement('canvas'); big.width = W * cols; big.height = H * rows; const bc = big.getContext('2d');
     for (let i = 0; i < ids.length; i++) {
       const info = window.setup({ seed: 3 + i, skin: ids[i], short: true });
-      window.renderFrame(4*(60/170)+2.2);
+      window.renderFrame(4*(60/170)+2.0);
       bc.drawImage(document.getElementById('c'), (i % cols) * W, Math.floor(i / cols) * H, W, H);
       bc.fillStyle = '#fff'; bc.font = '700 14px sans-serif'; bc.fillText(ids[i], (i % cols) * W + 6, Math.floor(i / cols) * H + 14);
     }

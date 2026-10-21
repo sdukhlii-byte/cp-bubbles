@@ -198,14 +198,15 @@ function paintBg(c, th, o) {
     L = th.layers[lay];
     var scroll = o.camY * o.SC * L.f - (L.fall || 0) * o.t, tile = L.th, smax = L.s[1] * 2.2;
     var t0 = Math.floor((scroll - 140) / tile) - 1, t1 = Math.floor((scroll + Hh + 140) / tile);
-    for (var ti = t0; ti <= t1; ti++) for (k = 0; k < L.n; k++) {
+    var QUIET = { confetti: 1, lightdots: 1, disco: 1, sparkle: 1, firefly: 1, suit: 1 }, kmax = L.d === 'grid' || L.d === 'stripes' ? L.n : Math.max(1, Math.round(L.n * (QUIET[L.d] ? 0.3 : 0.5)));
+    for (var ti = t0; ti <= t1; ti++) for (k = 0; k < kmax; k++) {
       var sd = ti * 131 + k * 17 + lay * 1013 + base, h1 = H(sd, 1), h2 = H(sd, 2), h3 = H(sd, 3), h4 = H(sd, 4);
       var sz = L.s[0] + (L.s[1] - L.s[0]) * h3, x = h1 * (W + 2 * smax) - smax;
       if (L.dx) { var span = W + 2 * smax; x = (((x + smax + L.dx * o.t) % span) + span) % span - smax; }
       var y = ti * tile + h2 * tile - scroll;
       if (y < -smax - 60 || y > Hh + smax + 60) continue;
       if (L.d === 'grid') { y = ti * tile - scroll; }
-      c.save(); c.globalAlpha = L.a; c.lineCap = 'round';
+      c.save(); c.globalAlpha = L.a * 0.85; c.lineCap = 'round';
       if (L.d === 'candle') { c.__alt = L.c[1]; }
       PAINT[L.d](c, x, y, sz, L.c[Math.floor(h4 * L.c.length) % L.c.length], o.t, h3 * .5 + h1 * .5, L);
       c.restore();
@@ -216,9 +217,9 @@ function paintBg(c, th, o) {
 }
 function ambient(c, th, o) {
   var W = o.W, Hh = o.H, t = o.t, i, a = th.amb;
-  if (a === 'snow') { c.fillStyle = '#fff'; for (i = 0; i < 70; i++) { var x = (H(i, 1) * W + Math.sin(t * .8 + i) * 14 + W) % W, y = (H(i, 2) * Hh + t * (30 + H(i, 3) * 50)) % Hh; c.globalAlpha = .55 + .4 * H(i, 4); c.beginPath(); c.arc(x, y, 1.2 + 2 * H(i, 3), 0, 6.3); c.fill(); } c.globalAlpha = 1; }
-  else if (a === 'embers') { for (i = 0; i < 40; i++) { var x2 = (H(i, 5) * W + Math.sin(t + i) * 10 + W) % W, y2 = Hh - ((H(i, 6) * Hh + t * (40 + H(i, 7) * 70)) % Hh); c.fillStyle = H(i, 8) > .5 ? '#ffb020' : '#ff5a14'; c.globalAlpha = .4 + .5 * H(i, 9); c.beginPath(); c.arc(x2, y2, 1 + 2 * H(i, 7), 0, 6.3); c.fill(); } c.globalAlpha = 1; }
-  else if (a === 'storm') { c.strokeStyle = 'rgba(180,200,230,.45)'; c.lineWidth = 1.2; c.beginPath(); for (i = 0; i < 90; i++) { var x3 = (H(i, 1) * (W + 80) + t * 60) % (W + 80) - 40, y3 = (H(i, 2) * Hh + t * 520) % Hh; c.moveTo(x3, y3); c.lineTo(x3 - 5, y3 + 16); } c.stroke();
+  if (a === 'snow') { c.fillStyle = '#fff'; for (i = 0; i < 28; i++) { var x = (H(i, 1) * W + Math.sin(t * .8 + i) * 14 + W) % W, y = (H(i, 2) * Hh + t * (30 + H(i, 3) * 50)) % Hh; c.globalAlpha = .55 + .4 * H(i, 4); c.beginPath(); c.arc(x, y, 1.2 + 2 * H(i, 3), 0, 6.3); c.fill(); } c.globalAlpha = 1; }
+  else if (a === 'embers') { for (i = 0; i < 16; i++) { var x2 = (H(i, 5) * W + Math.sin(t + i) * 10 + W) % W, y2 = Hh - ((H(i, 6) * Hh + t * (40 + H(i, 7) * 70)) % Hh); c.fillStyle = H(i, 8) > .5 ? '#ffb020' : '#ff5a14'; c.globalAlpha = .4 + .5 * H(i, 9); c.beginPath(); c.arc(x2, y2, 1 + 2 * H(i, 7), 0, 6.3); c.fill(); } c.globalAlpha = 1; }
+  else if (a === 'storm') { c.strokeStyle = 'rgba(180,200,230,.45)'; c.lineWidth = 1.2; c.beginPath(); for (i = 0; i < 40; i++) { var x3 = (H(i, 1) * (W + 80) + t * 60) % (W + 80) - 40, y3 = (H(i, 2) * Hh + t * 520) % Hh; c.moveTo(x3, y3); c.lineTo(x3 - 5, y3 + 16); } c.stroke();
     var ph = (t % 4.3), fl = ph < .12 ? (1 - ph / .12) : (ph > .3 && ph < .38 ? (1 - (ph - .3) / .08) * .6 : 0); if (fl > 0) { c.fillStyle = 'rgba(220,235,255,' + (fl * .35) + ')'; c.fillRect(0, 0, W, Hh); c.strokeStyle = 'rgba(255,255,220,' + fl + ')'; c.lineWidth = 3; c.beginPath(); var bx = 80 + H(Math.floor(t / 4.3), 3) * (W - 160), by = 0; c.moveTo(bx, by); for (i = 1; i < 8; i++) { bx += (H(Math.floor(t / 4.3) + i, 4) - .5) * 60; by += 70; c.lineTo(bx, by); } c.stroke(); } }
 }
 

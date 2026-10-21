@@ -152,6 +152,7 @@ function draw(t){
   var sa=t>=sc.tstart&&t<sc.tstart+0.4?(1-(t-sc.tstart)/0.4)*5:0;shx+=Math.sin(t*90)*sa;shy+=Math.cos(t*77)*sa;
   ctx.setTransform(S,0,0,S,0,0);ctx.clearRect(0,0,W,H);
   RV.paintBg(ctx,sk,{W:W,H:H,camY:camY,SC:SC,LEN:LEN,t:sc.live?performance.now()/1000:t,seed:sc.seed});
+  var SAFE=!!sc.safe;if(SAFE){ctx.save();ctx.translate(W*(1-0.86)/2,40);ctx.scale(0.86,0.86);}
   ctx.save();ctx.translate(shx,shy);
   function X(x){return 20+(x/WW)*(W-40);}
   var xs=SC;
@@ -183,16 +184,12 @@ function draw(t){
     if(zn.k==='belt'){ctx.fillStyle='rgba(76,201,240,0.16)';ctx.fillRect(20,zy-zh/2,W-40,zh);ctx.strokeStyle='#4cc9f0';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(20,zy-zh/2);ctx.lineTo(W-20,zy-zh/2);ctx.moveTo(20,zy+zh/2);ctx.lineTo(W-20,zy+zh/2);ctx.stroke();
       ctx.fillStyle='#4cc9f0';ctx.font='800 20px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';var off=((t*60)%48)*zn.dir;for(var ci=-1;ci<12;ci++)ctx.fillText(zn.dir>0?'›':'‹',20+ci*48+off+24,zy+1);}
     else{ctx.fillStyle='rgba(139,94,52,0.38)';ctx.fillRect(20,zy-zh/2,W-40,zh);ctx.strokeStyle='rgba(139,94,52,0.9)';ctx.lineWidth=2;ctx.strokeRect(20,zy-zh/2,W-40,zh);ctx.fillStyle='rgba(180,130,80,0.6)';for(var bi=0;bi<8;bi++){ctx.beginPath();ctx.arc(40+bi*62+((bi*37)%17),zy+((bi*53)%11)-5,3+(bi%3),0,6.3);ctx.fill();}}}
-  for(k=0;k<sim.tr.zones.length;k++){var zl2=sim.tr.zones[k],zly=Y(zl2.y);if(zly<140||zly>910)continue;
-    ctx.save();ctx.font='800 15px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,0.7)';ctx.lineJoin='round';
-    var zt=zl2.k==='belt'?(zl2.dir>0?'BULL RUN':'BEAR MARKET'):'SCAM LINK';ctx.fillStyle=zl2.k==='belt'?'#9be7ff':'#f3c58b';ctx.globalAlpha=0.85;
-    ctx.strokeText(zt,W/2,zly-zl2.h*SC/2-9);ctx.fillText(zt,W/2,zly-zl2.h*SC/2-9);ctx.restore();}
   for(k=0;k<sim.tr.pads.length;k++){var pd=sim.tr.pads[k],pyy=Y(pd.y);if(pyy<150||pyy>900)continue;
     var pw=pd.w*xs;ctx.fillStyle='rgba(61,220,151,0.25)';ctx.fillRect(X(pd.x)-pw/2,pyy-9,pw,18);ctx.strokeStyle='#3ddc97';ctx.lineWidth=2.4;ctx.strokeRect(X(pd.x)-pw/2,pyy-9,pw,18);
     ctx.fillStyle='#3ddc97';ctx.font='800 16px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('»  »  »',X(pd.x),pyy+1);}
   for(k=0;k<sim.tr.ports.length;k++){var po=sim.tr.ports[k],ppy=Y(po.y);if(ppy<130||ppy>920)continue;var pcol=po.k==='warp'?'#3ddc97':'#ff4d6d',pr2=po.r*xs;
     ctx.save();ctx.translate(X(po.x),ppy);for(var ri=0;ri<3;ri++){ctx.strokeStyle=pcol;ctx.globalAlpha=0.9-ri*0.25;ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,0,pr2*(1-ri*0.28),pr2*(1-ri*0.28)*0.9,t*(po.k==='warp'?4:-4)+ri,0.3,5.3);ctx.stroke();}
-    ctx.globalAlpha=1;ctx.fillStyle=pcol;ctx.font='800 '+Math.round(pr2*0.9)+'px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(po.k==='warp'?'+':'?',0,1);ctx.font='800 13px '+FONT;ctx.lineWidth=3;ctx.strokeStyle='#0a0c10';ctx.strokeText(po.k==='warp'?'PUMP':'RUG',0,pr2+12);ctx.fillText(po.k==='warp'?'PUMP':'RUG',0,pr2+12);ctx.restore();}
+    ctx.globalAlpha=1;ctx.fillStyle=pcol;ctx.font='800 '+Math.round(pr2*0.9)+'px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(po.k==='warp'?'+':'?',0,1);ctx.font='800 14px '+FONT;ctx.lineWidth=3.5;ctx.lineJoin='round';ctx.strokeStyle='#0a0c10';ctx.strokeText(po.k==='warp'?'PUMP':'RUG',0,pr2+13);ctx.fillText(po.k==='warp'?'PUMP':'RUG',0,pr2+13);ctx.restore();}
   /* coinplay.com: три раза за гонку, поверх препятствий и под шариками, чтобы успеть прочитать */
   [0.24,0.5,0.76].forEach(function(fr,bi){var dyy=Y(LEN*(fr+(((sc.simSeed*(bi+3)*2654435761)>>>0)/4294967296-0.5)*0.05));if(dyy>150&&dyy<880){ctx.save();ctx.translate(W/2,dyy);ctx.rotate(bi%2?0.05:-0.05);ctx.textAlign='center';ctx.textBaseline='middle';fitText(sc.url,'900',92,470);ctx.lineJoin='round';ctx.lineWidth=9;ctx.strokeStyle='rgba(4,6,10,0.5)';ctx.strokeText(sc.url,0,0);ctx.fillStyle='rgba(255,255,255,0.4)';ctx.fillText(sc.url,0,0);ctx.lineWidth=2.5;ctx.strokeStyle=sk.acc;ctx.globalAlpha=0.95;ctx.strokeText(sc.url,0,0);ctx.restore();}});
   /* финиш */
@@ -252,6 +249,7 @@ function draw(t){
     ctx.save();ctx.globalAlpha=(done&&!isW)||sim.ms[k].dead?0.3:1;
     fillRR(cx3,cy3,w3,26,13,isW?COLORS[k]:'rgba(8,11,16,0.88)');ctx.lineWidth=2;ctx.strokeStyle=COLORS[k];rr(cx3,cy3,w3,26,13);ctx.stroke();
     ctx.textAlign='center';ctx.textBaseline='middle';fitText(sc.names[k],'800',15,w3-16);ctx.fillStyle=isW?'#0a0c10':'#fff';ctx.fillText(sc.names[k],cx3+w3/2,cy3+14);ctx.restore();}
+  if(SAFE)ctx.restore();
 }
 
 /* общая подготовка сцены: и запись, и живой эфир. cfg: names, simSeed, skin, tstart, beat, swear, url, len */
@@ -288,14 +286,14 @@ function pickNames(o,rnd){
 window.setup=function(o){
   var sh=!!o.short,seed=o.seed|0,rnd=mulberry32((seed>>>0)^0x9e3779b9),bpm=+o.bpm||(sh?170:140),beat=60/bpm;
   var skin=(o.skin&&themeByName(o.skin))?o.skin:RV.themeOf(seed).id;
-  var names=pickNames(o,rnd),len=sh?1300:CPRace.DEFLEN;
+  var md=!!o.medium&&!sh,names=pickNames(o,rnd),len=sh?1300:md?2300:CPRace.DEFLEN;
   C.setLen(len);LEN=len;
-  var pl=C.plan(seed,names,sh?{tmin:5.6,tmax:6.7,max:90,gmax:0.45,lc:1,pcmin:1}:{tmin:21,tmax:28,max:60,gmax:0.6});
+  var pl=C.plan(seed,names,sh?{tmin:5.6,tmax:6.7,max:90,gmax:0.45,lc:1,pcmin:1}:md?{tmin:17.2,tmax:19.4,max:120,gmax:0.5,lc:2,pcmin:1}:{tmin:21,tmax:28,max:60,gmax:0.6});
   var tstart=4*beat,swear=(o.swear==='full'||o.swear==='off')?o.swear:'bleep';
   var pr=prepare({names:names,simSeed:pl.simSeed,seed:seed,skin:skin,tstart:tstart,beat:beat,swear:swear,url:o.url,len:len,warp:true}),a=pr.a;
-  scene.lang=TXT[o.lang]?o.lang:'en';
+  scene.lang=TXT[o.lang]?o.lang:'en';scene.safe=o.safe!==false&&o.safe!=='off';
   var vfin=tstart+vtOf(a.tf);
-  var dur=sh?Math.max(11,Math.min(13,Math.ceil((vfin+2.2)*2)/2)):Math.max(15,Math.min(45,Math.ceil(vfin+3.2)));
+  var dur=sh?Math.max(11,Math.min(13,Math.ceil((vfin+2.2)*2)/2)):md?Math.max(24,Math.min(27,Math.ceil((vfin+2.6)*2)/2)):Math.max(15,Math.min(45,Math.ceil(vfin+3.2)));
   return {bed:false,letter:names[a.win],skin:skin,duration:dur,tones:[],round:pl.simSeed,margin:+a.gap.toFixed(2),finish:+a.tf.toFixed(2),leadChanges:a.lc,portals:a.pc,kills:a.kc,names:names,personas:pr.pers,
     music:{bpm:bpm,tstart:tstart,fin:vfin,duration:dur,seed:seed,events:pr.ev},
     speech:scene.speech.map(function(x){return {at:+(tstart+vtOf(x.t)).toFixed(2),name:names[x.id],text:x.text};})};

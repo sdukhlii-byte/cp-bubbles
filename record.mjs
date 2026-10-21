@@ -20,7 +20,7 @@
 //   --domain     домен для меток платформ (coinplay.com)
 //   --account    метка аккаунта: coinplay.com/tt-es1 (то же самое, но с аккаунтом), попадает в имя файла и manifest
 //   --fps        кадров в секунду (30)
-//   --audio      добавить простые звуки
+//   --audio      звуки событий (удары, ножи, замедление, финиш), без музыки; --music beat вернёт синтезированный бит
 //   --out        папка результата (out)
 //   race:   --swear bleep|full|off  мат в репликах шариков: bleep (по умолчанию) = f*ck и писк цензуры, full = как есть, off = без реплик
 //           --bpm N      темп (по умолчанию 120);  --names a,b,c  имена участников (до 8)
@@ -168,9 +168,9 @@ for (const seed of seeds) {
     for (const plat of platforms) {
       const tag = plat ? plat + (account ? '-' + account : '') : '';
       const url = plat ? (args.showtag ? `${domain}/${tag}` : domain) : setupBase.url;
-      const info = await page.evaluate((o) => window.setup(o), { ...setupBase, url, seed, lang, short: !!args.short, bpm: args.bpm ? +args.bpm : undefined, swear: str(args.swear), names: args.names ? String(args.names).split(',') : undefined });
+      const info = await page.evaluate((o) => window.setup(o), { ...setupBase, url, seed, lang, short: !!args.short, medium: !!args.medium, safe: args.safe === 'off' ? false : true, bpm: args.bpm ? +args.bpm : undefined, swear: str(args.swear), names: args.names ? String(args.names).split(',') : undefined });
       const suffix = plat ? `_${tag}` : '';
-      const name = (game === 'race' ? `race_s${seed}_${lang}${args.short ? '_c12' : ''}` : game === 'drive' ? `drive_s${seed}_${lang}` : game === 'coin' ? `coin_s${seed}_${lang}_r${setupBase.rounds}` : game === 'chart'
+      const name = (game === 'race' ? `race_s${seed}_${lang}${args.short ? '_c12' : args.medium ? '_c25' : ''}` : game === 'drive' ? `drive_s${seed}_${lang}` : game === 'coin' ? `coin_s${seed}_${lang}_r${setupBase.rounds}` : game === 'chart'
         ? (setupBase.series ? `chad_s${seed}_${lang}_${setupBase.arc}_r${setupBase.rounds}` : `chart_s${seed}_${lang}_r${setupBase.rounds}`)
         : game === 'rekt'
           ? `rekt_s${seed}_${lang}_${info.fate}_e${setupBase.episodes}`
@@ -179,7 +179,7 @@ for (const seed of seeds) {
       const frames = Math.round(info.duration * fps);
       const tones = info.tones || roadTones();
       let wav;
-      if (withAudio && info.music) { wav = join(outDir, '.' + name + '.wav'); writeFileSync(wav, makeTrack(info.music)); }
+      if (withAudio && info.music) { wav = join(outDir, '.' + name + '.wav'); writeFileSync(wav, makeTrack({ ...info.music, beatOn: args.music === 'beat' })); }
       const ff = spawn('ffmpeg', ffmpegArgs(file, info.duration, tones, info.bed, wav), { stdio: ['pipe', 'ignore', 'inherit'] });
       const done = new Promise((res, rej) => { ff.on('close', (c) => (c === 0 ? res() : rej(new Error('ffmpeg exit ' + c)))); });
       for (let f = 0; f < frames; f++) {
