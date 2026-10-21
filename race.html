@@ -164,7 +164,6 @@ function draw(t){
     zz=1+0.24*smooth((rt-zw.a)/0.35)*(1-smooth((rt-(zw.a+zw.L+0.5))/0.7));
     if(zz>1.001){var zcx=X(sim.ms[zl].x),zcy=Y(sim.ms[zl].y);ctx.translate(zcx,zcy);ctx.scale(zz,zz);ctx.translate(-zcx,-zcy);}}
   /* крупная печать адреса на сукне: попадается в кадр один раз, пока шарики проезжают мимо */
-  {var dyw=LEN*(0.4+0.2*(((sc.simSeed*2654435761)>>>0)/4294967296)),dyy=Y(dyw);if(dyy>120&&dyy<950){ctx.save();ctx.translate(W/2,dyy);ctx.rotate(-0.06);ctx.textAlign='center';ctx.textBaseline='middle';fitText(sc.url,'900',88,456);ctx.lineJoin='round';ctx.lineWidth=9;ctx.strokeStyle='rgba(4,6,10,0.45)';ctx.strokeText(sc.url,0,0);ctx.fillStyle='rgba(255,255,255,0.34)';ctx.fillText(sc.url,0,0);ctx.lineWidth=2.5;ctx.strokeStyle=sk.acc;ctx.globalAlpha=0.9;ctx.strokeText(sc.url,0,0);ctx.restore();}}
   /* линии каждые 100 */
   ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=1;for(var ly=Math.floor((camY-200)/100)*100;ly<camY+400;ly+=100){ctx.beginPath();ctx.moveTo(20,Y(ly));ctx.lineTo(W-20,Y(ly));ctx.stroke();}
   /* препятствия */
@@ -194,6 +193,8 @@ function draw(t){
   for(k=0;k<sim.tr.ports.length;k++){var po=sim.tr.ports[k],ppy=Y(po.y);if(ppy<130||ppy>920)continue;var pcol=po.k==='warp'?'#3ddc97':'#ff4d6d',pr2=po.r*xs;
     ctx.save();ctx.translate(X(po.x),ppy);for(var ri=0;ri<3;ri++){ctx.strokeStyle=pcol;ctx.globalAlpha=0.9-ri*0.25;ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,0,pr2*(1-ri*0.28),pr2*(1-ri*0.28)*0.9,t*(po.k==='warp'?4:-4)+ri,0.3,5.3);ctx.stroke();}
     ctx.globalAlpha=1;ctx.fillStyle=pcol;ctx.font='800 '+Math.round(pr2*0.9)+'px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(po.k==='warp'?'+':'?',0,1);ctx.font='800 13px '+FONT;ctx.lineWidth=3;ctx.strokeStyle='#0a0c10';ctx.strokeText(po.k==='warp'?'PUMP':'RUG',0,pr2+12);ctx.fillText(po.k==='warp'?'PUMP':'RUG',0,pr2+12);ctx.restore();}
+  /* coinplay.com: три раза за гонку, поверх препятствий и под шариками, чтобы успеть прочитать */
+  [0.24,0.5,0.76].forEach(function(fr,bi){var dyy=Y(LEN*(fr+(((sc.simSeed*(bi+3)*2654435761)>>>0)/4294967296-0.5)*0.05));if(dyy>150&&dyy<880){ctx.save();ctx.translate(W/2,dyy);ctx.rotate(bi%2?0.05:-0.05);ctx.textAlign='center';ctx.textBaseline='middle';fitText(sc.url,'900',92,470);ctx.lineJoin='round';ctx.lineWidth=9;ctx.strokeStyle='rgba(4,6,10,0.5)';ctx.strokeText(sc.url,0,0);ctx.fillStyle='rgba(255,255,255,0.4)';ctx.fillText(sc.url,0,0);ctx.lineWidth=2.5;ctx.strokeStyle=sk.acc;ctx.globalAlpha=0.95;ctx.strokeText(sc.url,0,0);ctx.restore();}});
   /* финиш */
   var fy=Y(LEN);if(fy>150&&fy<900){for(k=0;k<20;k++){ctx.fillStyle=(k%2)?'#fff':'#0a0c10';ctx.fillRect(20+k*(W-40)/20,fy-6,(W-40)/20,6);ctx.fillStyle=(k%2)?'#0a0c10':'#fff';ctx.fillRect(20+k*(W-40)/20,fy,(W-40)/20,6);}
     fillRR(W/2-50,fy+14,100,28,8,'rgba(8,11,16,0.92)');ctx.fillStyle='#fff';ctx.font='800 17px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';fitText('FINISH','800',17,206);ctx.fillText('FINISH',W/2,fy+28);}
