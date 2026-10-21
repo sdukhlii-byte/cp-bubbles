@@ -164,7 +164,7 @@ function draw(t){
     zz=1+0.24*smooth((rt-zw.a)/0.35)*(1-smooth((rt-(zw.a+zw.L+0.5))/0.7));
     if(zz>1.001){var zcx=X(sim.ms[zl].x),zcy=Y(sim.ms[zl].y);ctx.translate(zcx,zcy);ctx.scale(zz,zz);ctx.translate(-zcx,-zcy);}}
   /* крупная печать адреса на сукне: попадается в кадр один раз, пока шарики проезжают мимо */
-  if(!sc.live){var dyw=LEN*(0.4+0.2*(((sc.simSeed*2654435761)>>>0)/4294967296)),dyy=Y(dyw);if(dyy>120&&dyy<950){ctx.save();ctx.translate(W/2,dyy);ctx.rotate(-0.06);ctx.textAlign='center';ctx.textBaseline='middle';fitText(sc.url,'900',84,440);ctx.fillStyle='rgba(255,255,255,0.13)';ctx.fillText(sc.url,0,0);ctx.lineWidth=2.5;ctx.strokeStyle=sk.acc;ctx.globalAlpha=0.45;ctx.strokeText(sc.url,0,0);ctx.restore();}}
+  {var dyw=LEN*(0.4+0.2*(((sc.simSeed*2654435761)>>>0)/4294967296)),dyy=Y(dyw);if(dyy>120&&dyy<950){ctx.save();ctx.translate(W/2,dyy);ctx.rotate(-0.06);ctx.textAlign='center';ctx.textBaseline='middle';fitText(sc.url,'900',88,456);ctx.lineJoin='round';ctx.lineWidth=9;ctx.strokeStyle='rgba(4,6,10,0.45)';ctx.strokeText(sc.url,0,0);ctx.fillStyle='rgba(255,255,255,0.34)';ctx.fillText(sc.url,0,0);ctx.lineWidth=2.5;ctx.strokeStyle=sk.acc;ctx.globalAlpha=0.9;ctx.strokeText(sc.url,0,0);ctx.restore();}}
   /* линии каждые 100 */
   ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=1;for(var ly=Math.floor((camY-200)/100)*100;ly<camY+400;ly+=100){ctx.beginPath();ctx.moveTo(20,Y(ly));ctx.lineTo(W-20,Y(ly));ctx.stroke();}
   /* препятствия */
