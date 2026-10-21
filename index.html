@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com; style-src 'unsafe-inline'; img-src data: blob: https:; connect-src 'self' https: wss:; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Coinplay Road</title>
+<style>
+  :root{color-scheme:dark}
+  html,body{margin:0;height:100%;background:#06080b;color:#fff;font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
+  html{-webkit-text-size-adjust:100%}
+  #app{height:100%;display:flex;flex-direction:column;align-items:center;gap:10px;box-sizing:border-box;overflow-y:auto;overflow-x:hidden;
+    padding:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))}
+  #app>:first-child{margin-top:auto}#app>:last-child{margin-bottom:auto}   /* центр по вертикали, но без обрезания, когда не помещается */
+  canvas{display:block;flex:none;max-width:100%;height:min(calc(100vh - 170px),calc(100dvh - 170px),calc((100vw - 16px) * 76 / 54));aspect-ratio:9/16;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.6);background:#0b0f14}
+  body:not(.record) canvas{aspect-ratio:54/76;object-fit:cover;object-position:50% 45%}   /* в живой версии обрезаем пустые поля сверху и снизу (кадр 1080x1920 остаётся прежним для роликов) */
+  #ui{display:flex;flex-direction:column;align-items:center;gap:8px;width:min(100%,420px)}
+  #btns button,#chat button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  #status{max-width:100%;overflow-wrap:anywhere}
+  @media (orientation:landscape) and (max-height:540px){   /* телефон на боку: игра слева, кнопки и чат справа */
+    #app{display:grid;grid-template-columns:auto minmax(0,380px);grid-template-rows:auto minmax(0,1fr);column-gap:16px;row-gap:8px;justify-content:center;align-content:center;align-items:start}
+    canvas{height:min(calc(100vh - 16px),calc(100dvh - 16px));grid-column:1;grid-row:1/span 2}
+    #ui{grid-column:2;grid-row:1;width:100%}
+  }
+  #btns{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%}
+  #btns button{font:700 26px system-ui,Arial,sans-serif;padding:12px 0;border-radius:14px;border:2px solid #2d3748;background:#10151c;color:#fff;cursor:pointer}
+  #btns button.sel{border-color:#f5b83d;background:#241c0c}
+  #btns button:disabled{opacity:.45;cursor:default}
+  #status{min-height:22px;font-size:16px;opacity:.9;text-align:center}
+  #score{font-size:14px;opacity:.7}
+  #bot,#site{color:#f5b83d;font-weight:600;text-decoration:none;display:none;font-size:16px}
+  body.record{background:#000}
+  body.record #ui{display:none}
+  body.record #app{padding:0;height:auto;display:block}
+  body.record canvas{height:1920px;width:1080px;border-radius:0;box-shadow:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="c"></canvas>
+  <div id="ui">
+    <div id="btns"><button data-i="0">A</button><button data-i="1">B</button><button data-i="2">C</button></div>
+    <div id="status"></div>
+    <div id="score"></div>
+    <a id="bot" target="_blank" rel="noopener"></a>
+    <a id="site" target="_blank" rel="noopener"></a>
+  </div>
+</div>
+<script src="chat.js"></script>
+<script>
+(function(){
+'use strict';
+var W=540,H=960,S=2;
+var FONT='system-ui,"Segoe UI",Roboto,Arial,"Liberation Sans","DejaVu Sans",sans-serif';
+var L=['A','B','C'];
+var ENDX=[95,270,445];
+var NODE_Y=272;
+var T={start:0.5,arrive:6.2,count:6.6,go:9.6,end:13.0,total:15.0,qTotal:11.0};
+var BONUS='unlock the daily bonus';
+var BRAND_RE=/^coinplay\.com(\/[A-Za-z0-9_-]{1,24})?$/;  /* текст билборда: только coinplay.com или coinplay.com/метка */
+
+var TXT={
+  ru:{q:'Куда поедет машина?',hint:'Пиши A, B или C в комментариях',next:'Ответ — в следующем видео',ans:'Ответ:',win:'Угадал! +1',lose:'Мимо',bot:'Играть в боте'},
+  en:{q:'Where will the car go?',hint:'Comment A, B or C',next:'Answer in the next video',ans:'Answer:',win:'Nice! +1',lose:'Missed',bot:'Play in the bot'},
+  es:{q:'¿A dónde irá el coche?',hint:'Comenta A, B o C',next:'Respuesta en el próximo vídeo',ans:'Respuesta:',win:'¡Acertaste! +1',lose:'Fallaste',bot:'Juega en el bot'},
+  pt:{q:'Para onde o carro vai?',hint:'Comente A, B ou C',next:'Resposta no próximo vídeo',ans:'Resposta:',win:'Acertou! +1',lose:'Errou',bot:'Jogue no bot'},
+  de:{q:'Wohin fährt das Auto?',hint:'Kommentiere A, B oder C',next:'Auflösung im nächsten Video',ans:'Antwort:',win:'Treffer! +1',lose:'Daneben',bot:'Im Bot spielen'},
+  tr:{q:'Araba nereye gidecek?',hint:'A, B veya C yaz',next:'Cevap bir sonraki videoda',ans:'Cevap:',win:'Bildin! +1',lose:'Kaçırdın',bot:'Botta oyna'},
+  lv:{q:'Uz kurieni brauks auto?',hint:'Komentē A, B vai C',next:'Atbilde — nākamajā video',ans:'Atbilde:',win:'Trāpīji! +1',lose:'Garām',bot:'Spēlē botā'},
+  lt:{q:'Kur nuvažiuos mašina?',hint:'Komentuok A, B arba C',next:'Atsakymas — kitame vaizdo įraše',ans:'Atsakymas:',win:'Atspėjai! +1',lose:'Neatspėjai',bot:'Žaisk bote'},
+  hr:{q:'Kamo će auto otići?',hint:'Komentiraj A, B ili C',next:'Odgovor u sljedećem videu',ans:'Odgovor:',win:'Pogodak! +1',lose:'Promašaj',bot:'Igraj u botu'},
+  sr:{q:'Kuda će auto skrenuti?',hint:'Komentariši A, B ili C',next:'Odgovor u sledećem videu',ans:'Odgovor:',win:'Pogodak! +1',lose:'Promašaj',bot:'Igraj u botu'}
+};
+
+var SKINS={
+  gold:{bg:'#0b0f14',block:'#131a23',road:'#1b2330',edge:'#2c3a4d',accent:'#f5b83d'},
+  cyan:{bg:'#070d14',block:'#0f1a25',road:'#16212d',edge:'#25405a',accent:'#38d6f5'},
+  violet:{bg:'#0d0a16',block:'#181228',road:'#211b32',edge:'#3a2f5a',accent:'#b27cff'},
+  mono:{bg:'#0f0f10',block:'#1a1a1c',road:'#252527',edge:'#3c3c40',accent:'#e5e7eb'}
+};
+var SKIN_NAMES=Object.keys(SKINS);
+var CARS=['#f5b83d','#38d6f5','#ff4d6d','#b27cff','#34d399','#f8fafc'];
+
+var q=new URLSearchParams(location.search);
+var RECORD=q.get('mode')==='record';
+if(RECORD) document.body.classList.add('record');
+
+var cv=document.getElementById('c');
+var ctx=cv.getContext('2d');
+cv.width=W*S; cv.height=H*S;
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+/* ---------- drawing helpers ---------- */
+function rr(x,y,w,h,r){r=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();}
+function fillRR(x,y,w,h,r,c){ctx.fillStyle=c;rr(x,y,w,h,r);ctx.fill();}
+function fitText(str,weight,maxSize,maxW){var s=maxSize;ctx.font=weight+' '+s+'px '+FONT;var w=ctx.measureText(str).width;if(w>maxW){s=Math.floor(s*maxW/w);ctx.font=weight+' '+s+'px '+FONT;}return s;}
+function strokePts(pts,w,color,dash){ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);for(var i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);ctx.lineWidth=w;ctx.strokeStyle=color;ctx.lineCap=dash?'butt':'round';ctx.lineJoin='round';ctx.setLineDash(dash||[]);ctx.stroke();ctx.setLineDash([]);}
+function smooth(x){x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);}
+
+/* ---------- scene ---------- */
+function bez(p0,p1,p2,p3,n){var o=[],i,t,u;for(i=1;i<=n;i++){t=i/n;u=1-t;o.push([u*u*u*p0[0]+3*u*u*t*p1[0]+3*u*t*t*p2[0]+t*t*t*p3[0],u*u*u*p0[1]+3*u*u*t*p1[1]+3*u*t*t*p2[1]+t*t*t*p3[1]]);}return o;}
+
+function buildScene(seed,o){
+  o=o||{};
+  var r=mulberry32(((seed>>>0)^0x9e3779b9)>>>0);
+  var outcome=Math.floor(r()*3);
+  var skinRand=r();
+  var skin=(o.skin&&SKINS[o.skin])?o.skin:SKIN_NAMES[Math.floor(skinRand*SKIN_NAMES.length)];
+  var carColor=CARS[Math.floor(r()*CARS.length)];
+  var o1=r()*900,o2=r()*900;
+  var BR=[0,1,2].map(function(i){return bez([270,520],[270,430],[ENDX[i],420],[ENDX[i],335],48);});
+  var MAIN=[];for(var y=880;y>=520;y-=4)MAIN.push([270,y]);
+  var pts=MAIN.concat(BR[outcome]);
+  var cum=[0];for(var i=1;i<pts.length;i++){var dx=pts[i][0]-pts[i-1][0],dy=pts[i][1]-pts[i-1][1];cum.push(cum[i-1]+Math.sqrt(dx*dx+dy*dy));}
+  var path={pts:pts,cum:cum,D1:cum[MAIN.length-1],D:cum[cum.length-1]};
+  var roadPts=[];for(y=520;y<=990;y+=12)roadPts.push([270,y]);
+  BR.forEach(function(b){b.forEach(function(p){roadPts.push(p);});});
+  for(var x=-20;x<=560;x+=14)roadPts.push([x,800]);
+  var avoid=[[0,0,540,330],[8,578,236,752],[300,600,445,765]];
+  var rt=mulberry32(((seed*7919)+13)>>>0);
+  var blocks=[],tries=0;
+  while(blocks.length<24&&tries<800){
+    tries++;
+    var bw=30+rt()*42,bh=30+rt()*42,bx=bw/2+6+rt()*(W-bw-12),by=330+bh/2+rt()*(H-330-bh/2);
+    var ok=true,k,need=30+0.62*Math.max(bw,bh)+6;
+    for(k=0;k<roadPts.length;k++){var ddx=roadPts[k][0]-bx,ddy=roadPts[k][1]-by;if(ddx*ddx+ddy*ddy<need*need){ok=false;break;}}
+    if(!ok)continue;
+    for(k=0;k<avoid.length;k++){var a=avoid[k];if(bx+bw/2>a[0]-6&&bx-bw/2<a[2]+6&&by+bh/2>a[1]-6&&by-bh/2<a[3]+6){ok=false;break;}}
+    if(!ok)continue;
+    for(k=0;k<blocks.length;k++){var b2=blocks[k];if(Math.abs(b2.x-bx)<(b2.w+bw)/2+8&&Math.abs(b2.y-by)<(b2.h+bh)/2+8){ok=false;break;}}
+    if(ok)blocks.push({x:bx,y:by,w:bw,h:bh,s:Math.floor(rt()*97)});
+  }
+  var rc=mulberry32(((seed*104729)+7)>>>0);
+  var conf=[];for(i=0;i<30;i++){var ang=-Math.PI/2+(rc()-0.5)*2.6,sp=90+rc()*200;conf.push({vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,r:1.5+rc()*2.5});}
+  return {seed:seed,outcome:outcome,skin:skin,carColor:carColor,o1:o1,o2:o2,BR:BR,path:path,blocks:blocks,conf:conf,
+          bonus:(o.bonus&&String(o.bonus).slice(0,40))||BONUS,
+          url:(o.url&&BRAND_RE.test(String(o.url)))?String(o.url):'coinplay.com',
+          lang:TXT[o.lang]?o.lang:'en',mode:o.mode==='question'?'question':'full'};
+}
+
+function posAt(path,d){var c=path.cum;d=Math.max(0,Math.min(d,c[c.length-1]));var i=1;while(i<c.length-1&&c[i]<d)i++;var a=path.pts[i-1],b=path.pts[i];var seg=(c[i]-c[i-1])||1;var u=(d-c[i-1])/seg;return[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u];}
+function carDist(t,sc){
+  var D1=sc.path.D1,D=sc.path.D;
+  if(t<T.start)return 0;
+  if(t<T.arrive){var u=(t-T.start)/(T.arrive-T.start);return D1*(1-(1-u)*(1-u));}
+  if(t<T.go||sc.mode==='question')return D1;
+  if(t<T.end){var v=(t-T.go)/(T.end-T.go);var e=v<0.5?2*v*v:1-Math.pow(-2*v+2,2)/2;return D1+(D-D1)*e;}
+  return D;
+}
+
+function drawBlock(b,sk){
+  fillRR(b.x-b.w/2,b.y-b.h/2,b.w,b.h,4,sk.block);
+  var cols=Math.max(2,Math.floor((b.w-8)/9)),rows=Math.max(2,Math.floor((b.h-8)/9));
+  var ox=b.x-((cols-1)*9)/2,oy=b.y-((rows-1)*9)/2;
+  for(var r=0;r<rows;r++)for(var c=0;c<cols;c++){
+    var lit=((r*7+c*13+b.s)%6)===0;
+    ctx.globalAlpha=lit?0.55:0.1;ctx.fillStyle=sk.accent;ctx.fillRect(ox+c*9-1.5,oy+r*9-1.5,3,3);
+  }
+  ctx.globalAlpha=1;
+}
+function drawCar(x,y,ang,color,glow,brake){
+  ctx.save();ctx.translate(x,y);ctx.rotate(ang+Math.PI/2);ctx.scale(1.3,1.3);
+  if(glow>0){
+    var g=ctx.createLinearGradient(0,-20,0,-78);
+    g.addColorStop(0,'rgba(255,244,200,'+(0.38*glow).toFixed(3)+')');g.addColorStop(1,'rgba(255,244,200,0)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(-8,-21);ctx.lineTo(-26,-78);ctx.lineTo(26,-78);ctx.lineTo(8,-21);ctx.closePath();ctx.fill();
+  }
+  fillRR(-11,-22,22,44,9,color);
+  fillRR(-1.5,-22,3,44,1.5,'rgba(255,255,255,0.28)');
+  fillRR(-8,-11,16,9,3,'#0b1220');
+  fillRR(-8,10,16,6,2,'#0b1220');
+  ctx.fillStyle='#fff7c2';ctx.beginPath();ctx.arc(-7.5,-20.5,2.4,0,6.3);ctx.arc(7.5,-20.5,2.4,0,6.3);ctx.fill();
+  ctx.fillStyle=brake?'#ff2a2a':'#7f1d1d';ctx.fillRect(-10,19,6,2.5);ctx.fillRect(4,19,6,2.5);
+  ctx.restore();
+}
+function traffic(x,y,dir,color){
+  ctx.save();ctx.translate(x,y);ctx.scale(dir,1);
+  var g=ctx.createLinearGradient(18,0,52,0);g.addColorStop(0,'rgba(255,244,200,0.28)');g.addColorStop(1,'rgba(255,244,200,0)');
+  ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(18,-5);ctx.lineTo(52,-14);ctx.lineTo(52,14);ctx.lineTo(18,5);ctx.closePath();ctx.fill();
+  fillRR(-18,-8,36,16,6,color);fillRR(-4,-5.5,12,11,3,'#0b1220');
+  ctx.fillStyle='#fff7c2';ctx.fillRect(16,-6.5,3,4);ctx.fillRect(16,2.5,3,4);
+  ctx.fillStyle='#ff2a2a';ctx.fillRect(-19,-6.5,2,4);ctx.fillRect(-19,2.5,2,4);
+  ctx.restore();
+}
+/* единственная рекламная поверхность: билборд coinplay.com + строка про бонус */
+function billboard(sk,bonus,url){url=url||'coinplay.com';
+  var x=12,y=590,w=218,h=112;
+  fillRR(x+30,y+h-4,8,50,2,'#232b36');fillRR(x+w-38,y+h-4,8,50,2,'#232b36');
+  ctx.save();ctx.shadowColor=sk.accent;ctx.shadowBlur=22;fillRR(x,y,w,h,12,'#0a0d12');ctx.restore();
+  fillRR(x,y,w,h,12,'#0a0d12');
+  ctx.lineWidth=3;ctx.strokeStyle=sk.accent;rr(x,y,w,h,12);ctx.stroke();
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  fitText(url,'800',34,w-30);ctx.fillStyle='#ffffff';ctx.fillText(url,x+w/2,y+42);
+  ctx.fillStyle=sk.accent;ctx.fillRect(x+w/2-36,y+h/2+2,72,2);
+  fitText(bonus,'600',17,w-30);ctx.fillStyle=sk.accent;ctx.fillText(bonus,x+w/2,y+84);
+}
+function bigText(str,x,y,size,alpha){
+  ctx.save();ctx.globalAlpha=alpha;ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='800 '+size+'px '+FONT;
+  ctx.lineWidth=size*0.12;ctx.strokeStyle='#05070a';ctx.lineJoin='round';ctx.strokeText(str,x,y);
+  ctx.fillStyle='#ffffff';ctx.fillText(str,x,y);ctx.restore();
+}
+
+/* ---------- frame ---------- */
+var scene=null;
+function draw(t){
+  var sc=scene,sk=SKINS[sc.skin],tx=TXT[sc.lang],mode=sc.mode;
+  var reveal=(mode!=='question')&&t>=T.end;
+  var i;
+  ctx.setTransform(S,0,0,S,0,0);
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle=sk.bg;ctx.fillRect(0,0,W,H);
+  /* city blocks */
+  sc.blocks.forEach(function(b){drawBlock(b,sk);});
+  /* roads */
+  var cross=[[-30,800],[570,800]],main=[[270,1000],[270,520]];
+  var brd=[0,1,2].map(function(n){return [[270,520]].concat(sc.BR[n]);});
+  var all=[cross,main].concat(brd);
+  all.forEach(function(p){strokePts(p,62,sk.edge);});
+  all.forEach(function(p){strokePts(p,56,sk.road);});
+  if(reveal){ctx.save();ctx.globalAlpha=0.16+0.1*Math.sin((t-T.end)*6);strokePts(brd[sc.outcome],56,sk.accent);ctx.restore();}
+  ctx.save();ctx.globalAlpha=0.55;all.forEach(function(p){strokePts(p,2.5,sk.accent,[14,16]);});ctx.restore();
+  /* destination nodes */
+  for(i=0;i<3;i++){
+    var chosen=reveal&&i===sc.outcome;
+    ctx.save();ctx.globalAlpha=(reveal&&!chosen)?0.3:1;
+    ctx.beginPath();ctx.arc(ENDX[i],NODE_Y,26,0,6.3);
+    ctx.fillStyle=chosen?sk.accent:'rgba(255,255,255,0.05)';ctx.fill();
+    ctx.lineWidth=3;ctx.strokeStyle=sk.accent;ctx.stroke();
+    ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='800 28px '+FONT;ctx.fillStyle=chosen?'#0b0f14':'#ffffff';ctx.fillText(L[i],ENDX[i],NODE_Y+1);
+    ctx.restore();
+  }
+  billboard(sk,sc.bonus,sc.url);
+  /* ambient traffic */
+  var span=W+260;
+  traffic(((t*55+sc.o1)%span)-130,790,1,'#475569');
+  traffic(W+130-((t*42+sc.o2)%span),811,-1,'#334155');
+  /* player car */
+  var d=carDist(t,sc);
+  var p=posAt(sc.path,d),p1=posAt(sc.path,d-6),p2=posAt(sc.path,d+6);
+  var ang=Math.atan2(p2[1]-p1[1],p2[0]-p1[0]);
+  var waiting=(t>=T.arrive)&&(mode==='question'||t<T.go);
+  if(waiting){
+    var wg=Math.sin((t-T.arrive)*2.6)*0.28*Math.min(1,(t-T.arrive)/0.8);
+    if(mode!=='question')wg*=(1-smooth((t-(T.go-0.5))/0.5));
+    ang+=wg;
+  }
+  drawCar(p[0],p[1],ang,sc.carColor,waiting?(0.6+0.4*Math.sin(t*9)):0.4,waiting);
+  /* reveal effects */
+  if(reveal){
+    var tt=t-T.end,k;
+    for(k=0;k<3;k++){
+      var rtm=tt*1.2-k*0.25;
+      if(rtm>0&&rtm<1){ctx.save();ctx.globalAlpha=(1-rtm)*0.6;ctx.lineWidth=3;ctx.strokeStyle=sk.accent;ctx.beginPath();ctx.arc(ENDX[sc.outcome],NODE_Y,26+rtm*80,0,6.3);ctx.stroke();ctx.restore();}
+    }
+    for(i=0;i<sc.conf.length;i++){
+      var c=sc.conf[i];
+      var cx=ENDX[sc.outcome]+c.vx*tt,cy=NODE_Y+c.vy*tt+260*tt*tt;
+      var al=tt>1.7?Math.max(0,1-(tt-1.7)/0.3):1;if(al<=0)continue;
+      ctx.save();ctx.globalAlpha=al;ctx.fillStyle=(i%3===0)?'#ffffff':sk.accent;ctx.beginPath();ctx.arc(cx,cy,c.r,0,6.3);ctx.fill();ctx.restore();
+    }
+  }
+  /* top panel */
+  var l1,l2=null,c1='#ffffff';
+  if(reveal){l1=tx.ans+' '+L[sc.outcome];c1=sk.accent;}
+  else{l1=tx.q;l2=(mode==='question'&&t>=T.go)?tx.next:tx.hint;}
+  fillRR(30,104,480,92,18,'rgba(8,11,16,0.88)');
+  ctx.lineWidth=2;ctx.strokeStyle=sk.accent;rr(30,104,480,92,18);ctx.stroke();
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  if(l2===null){fitText(l1,'800',46,440);ctx.fillStyle=c1;ctx.fillText(l1,270,150);}
+  else{fitText(l1,'800',38,440);ctx.fillStyle=c1;ctx.fillText(l1,270,141);fitText(l2,'600',26,440);ctx.fillStyle=sk.accent;ctx.fillText(l2,270,177);}
+  /* countdown */
+  if(t>=T.count&&(mode==='question'||t<T.go)){
+    var str,f;
+    if(mode==='question'&&t>=T.go){str='?';f=0;}
+    else{str=String(Math.ceil(T.go-t));f=(t-T.count)%1;}
+    var pop=1+0.5*Math.max(0,1-f*4);
+    bigText(str,385,690,150*pop,1-f*0.3);
+  }
+}
+
+/* ---------- API for recorder ---------- */
+window.setup=function(o){
+  scene=buildScene((o.seed|0)>>>0,o);
+  return {letter:L[scene.outcome],skin:scene.skin,duration:scene.mode==='question'?T.qTotal:T.total};
+};
+window.renderFrame=function(t){draw(t);};
+window.__ready=true;
+
+/* ---------- live mode ---------- */
+if(!RECORD){
+  var navLang=(navigator.language||'en').slice(0,2);
+  var lang=TXT[q.get('lang')]?q.get('lang'):'en';  /* пока всё на английском; другие языки только явно через ?lang= */
+  var qskin=q.get('skin'),qbonus=null;  /* ?bonus= в живой версии отключён: текст билборда задаётся только при записи */
+  var baseSeed=q.get('seed')?(+q.get('seed')|0):(Date.now()%100000);
+  var botUrl=q.get('bot');
+  var statusEl=document.getElementById('status'),scoreEl=document.getElementById('score'),botEl=document.getElementById('bot');
+  var btns=Array.prototype.slice.call(document.querySelectorAll('#btns button'));
+  var tx0=TXT[lang];
+  /* --- трекинг и ссылки: bot и site принимают только разрешённые домены, src попадает в start-параметр бота и utm --- */
+  var GAME='road';
+  var HOSTS={site:['coinplay.com'],bot:['t.me','telegram.me']};
+  var DEFAULT_BOT='';   /* например 'https://t.me/ваш_бот'; можно также передать ?bot= */
+  var HOOK='';          /* URL сборщика событий (Keitaro или свой эндпоинт); пусто = только window.dataLayer */
+  function clean(s){return String(s||'').replace(/[^A-Za-z0-9_-]/g,'_').slice(0,64);}
+  function safeUrl(u,hosts){try{var x=new URL(u);if(x.protocol!=='https:')return null;var h=x.hostname.toLowerCase();for(var i=0;i<hosts.length;i++){if(h===hosts[i]||h.slice(-hosts[i].length-1)==='.'+hosts[i])return x.href;}}catch(e){}return null;}
+  function withParam(u,k,v){var x=new URL(u);x.searchParams.set(k,v);return x.href;}
+  var src=clean(q.get('src')||'organic').slice(0,50);  /* запас под суффикс игры: start у Telegram не длиннее 64 */
+  var sp=src.split('_'),utmSrc=sp[0],utmCont=sp.slice(1).join('_');  /* tt_es1 -> source=tt, content=es1, как в редиректах из links.mjs */
+  function track(ev,data){
+    try{window.dataLayer=window.dataLayer||[];window.dataLayer.push({event:'cp_'+ev,cp_game:GAME,cp_src:src,cp_data:data||null});}catch(e){}
+    if(HOOK){try{navigator.sendBeacon(HOOK,JSON.stringify({ev:ev,game:GAME,src:src,data:data||null,ts:Date.now()}));}catch(e){}}
+  }
+  var BONUS_LBL={ru:'Бонус дня',en:'Daily bonus',es:'Bono diario',pt:'Bônus diário',de:'Tagesbonus',tr:'Günlük bonus',lv:'Dienas bonuss',lt:'Dienos bonusas',hr:'Dnevni bonus',sr:'Dnevni bonus'};
+  var siteEl=document.getElementById('site');
+  var botSafe=safeUrl(q.get('bot')||DEFAULT_BOT,HOSTS.bot);
+  if(botSafe){botEl.href=withParam(botSafe,'start',clean(src+'_'+GAME));botEl.textContent=tx0.bot;botEl.style.display='block';botEl.addEventListener('click',function(){track('cta_bot');});}
+  var siteSafe=safeUrl(q.get('site')||'https://coinplay.com',HOSTS.site)||'https://coinplay.com';
+  var siteHref=withParam(withParam(withParam(siteSafe,'utm_source',utmSrc),'utm_medium','game'),'utm_campaign',GAME);
+  siteEl.href=utmCont?withParam(siteHref,'utm_content',utmCont):siteHref;
+  siteEl.textContent=BONUS_LBL[lang]||BONUS_LBL.en;siteEl.style.display='block';siteEl.addEventListener('click',function(){track('cta_site');});
+  track('view');
+  var GTM_ID='';        /* контейнер GTM вида GTM-XXXXXXX; пусто = не загружать (события всё равно лежат в window.dataLayer) */
+  if(/^GTM-[A-Z0-9]{4,10}$/.test(GTM_ID)){window.dataLayer=window.dataLayer||[];window.dataLayer.push({'gtm.start':Date.now(),event:'gtm.js'});var gs=document.createElement('script');gs.async=true;gs.src='https://www.googletagmanager.com/gtm.js?id='+GTM_ID;document.head.appendChild(gs);}
+  var RG={ru:'Только 18+. Играйте ответственно.',en:'18+ only. Play responsibly.',es:'Solo +18. Juega con responsabilidad.',pt:'Apenas 18+. Jogue com responsabilidade.',de:'Nur ab 18. Spiele verantwortungsvoll.',tr:'Yalnızca 18+. Sorumlu oynayın.',lv:'Tikai 18+. Spēlē atbildīgi.',lt:'Tik 18+. Žaisk atsakingai.',hr:'Samo 18+. Igrajte odgovorno.',sr:'Samo 18+. Igrajte odgovorno.'};
+  if(window.CPChat)CPChat.init({room:GAME+':'+lang,lang:lang,onEvent:track});
+  var rgEl=document.createElement('div');rgEl.textContent=RG[lang]||RG.en;rgEl.style.cssText='text-align:center;font-size:12px;opacity:.55;margin:10px 0 4px;';document.body.appendChild(rgEl);
+  var stats={w:0,n:0};
+  try{var raw=localStorage.getItem('cpRoad');if(raw)stats=JSON.parse(raw)||stats;}catch(e){}
+  stats={w:Math.max(0,+stats.w|0),n:Math.max(0,+stats.n|0)};if(stats.w>stats.n)stats.w=stats.n;  /* защита от битого localStorage */
+  function showScore(){scoreEl.textContent=stats.w+' / '+stats.n;}
+  function saveScore(){try{localStorage.setItem('cpRoad',JSON.stringify(stats));}catch(e){}}
+  var round=null;
+  function newRound(){
+    scene=buildScene(baseSeed++,{lang:lang,skin:qskin,bonus:qbonus,url:q.get('url')});
+    round={start:performance.now(),choice:-1,done:false};
+    btns.forEach(function(b){b.classList.remove('sel');b.disabled=false;});
+    statusEl.textContent=tx0.hint;
+  }
+  btns.forEach(function(b){b.addEventListener('click',function(){
+    var t=(performance.now()-round.start)/1000;
+    if(t>=T.go||round.choice>=0)return;
+    round.choice=+b.dataset.i;b.classList.add('sel');track('pick',{i:round.choice});
+  });});
+  showScore();newRound();
+  (function frame(){
+    var t=(performance.now()-round.start)/1000;
+    if(t>T.total+1.2){newRound();t=0;}
+    if(t>=T.go)btns.forEach(function(b){b.disabled=true;});
+    if(t>=T.end&&!round.done){
+      round.done=true;
+      if(round.choice>=0){stats.n++;if(round.choice===scene.outcome){stats.w++;statusEl.textContent=tx0.win;}else statusEl.textContent=tx0.lose;track('result',{w:stats.w,n:stats.n});saveScore();showScore();}
+    }
+    draw(Math.min(t,T.total));
+    requestAnimationFrame(frame);
+  })();
+}
+})();
+</script>
+</body>
+</html>

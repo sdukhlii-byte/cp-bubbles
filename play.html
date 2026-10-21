@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://www.googletagmanager.com; style-src 'unsafe-inline'; img-src data: blob: https:; connect-src https:; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>coinplay games</title>
+<style>
+  :root{--bg:#0b0d12;--card:#151922;--line:#262c3a;--fg:#f2f4f8;--mut:#8a93a6;--acc:#f5b83d}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:28px 16px}
+  h1{font-size:22px;margin:0 0 4px;letter-spacing:.3px}
+  p.sub{margin:0 0 22px;color:var(--mut);font-size:14px}
+  .list{width:100%;max-width:420px;display:flex;flex-direction:column;gap:12px}
+  a.card{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;color:inherit;text-decoration:none}
+  a.card:hover,a.card:focus-visible{border-color:var(--acc)}
+  .t{font-weight:700;font-size:17px}
+  .d{color:var(--mut);font-size:14px;margin-top:2px}
+  a.bonus{margin-top:22px;color:var(--acc);font-weight:600;text-decoration:none}
+</style>
+</head>
+<body>
+<h1>coinplay games</h1>
+<p class="sub" id="sub">Pick a game</p>
+<div class="list">
+  <a class="card" data-g="chart.html"><div class="t">Chart</div><div class="d" data-k="chart">Higher or lower? Endless rounds.</div></a>
+  <a class="card" data-g="rekt.html"><div class="t">Chad</div><div class="d" data-k="rekt">Will he make it this time?</div></a>
+  <a class="card" data-g="race.html"><div class="t">Marble Race</div><div class="d" data-k="race">Bet on a name. Live 24/7.</div></a>
+  <a class="card" data-g="index.html"><div class="t">Road</div><div class="d" data-k="road">Which way will the car go?</div></a>
+</div>
+<a class="bonus" id="bonus" rel="noopener"></a>
+<script>
+(function(){
+  var q=new URLSearchParams(location.search);
+  var T={
+    en:{sub:'Pick a game',rekt:'Will he make it this time?',chart:'Higher or lower? Endless rounds.',road:'Which way will the car go?',race:'Bet on a name. Live 24/7.',bonus:'Daily bonus'},
+    ru:{race:'Ставь на имя. Эфир 24/7.',sub:'Выбери игру',rekt:'Выживет ли он на этот раз?',chart:'Выше или ниже? Бесконечные раунды.',road:'Куда поедет машинка?',bonus:'Бонус дня'},
+    es:{race:'Apuesta por un nombre. En vivo 24/7.',sub:'Elige un juego',rekt:'¿Lo logrará esta vez?',chart:'¿Arriba o abajo? Rondas sin fin.',road:'¿Hacia dónde irá el coche?',bonus:'Bono diario'}
+  };
+  var nav=(navigator.language||'en').slice(0,2);
+  var l=T[q.get('lang')]?q.get('lang'):'en', tx=T[l];
+  document.documentElement.lang=l;
+  document.getElementById('sub').textContent=tx.sub;
+  Array.prototype.forEach.call(document.querySelectorAll('[data-k]'),function(e){e.textContent=tx[e.dataset.k];});
+  /* параметры (src, lang, bot, site, skin ...) передаются в игру как есть */
+  Array.prototype.forEach.call(document.querySelectorAll('a.card'),function(a){a.href=a.dataset.g+location.search;});
+  var src=String(q.get('src')||'organic').replace(/[^A-Za-z0-9_-]/g,'_').slice(0,50);
+  var sp=src.split('_');
+  var b=document.getElementById('bonus');
+  b.href='https://coinplay.com/?utm_source='+encodeURIComponent(sp[0])+'&utm_medium=hub&utm_campaign=play'+(sp.length>1?'&utm_content='+encodeURIComponent(sp.slice(1).join('_')):'');
+  b.textContent=tx.bonus;
+  var rg={ru:'Только 18+. Играйте ответственно.',en:'18+ only. Play responsibly.',es:'Solo +18. Juega con responsabilidad.'};
+  var rgEl=document.createElement('div');rgEl.textContent=rg[l]||rg.en;rgEl.style.cssText='text-align:center;font-size:12px;opacity:.55;margin-top:22px;';document.body.appendChild(rgEl);
+  try{window.dataLayer=window.dataLayer||[];window.dataLayer.push({event:'cp_view',cp_game:'hub',cp_src:src});}catch(e){}
+})();
+</script>
+</body>
+</html>

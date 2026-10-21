@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com; style-src 'unsafe-inline'; img-src data: blob: https:; connect-src 'self' https: wss:; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Coinplay Chart</title>
+<style>
+  :root{color-scheme:dark}
+  html,body{margin:0;height:100%;background:#06080b;color:#fff;font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
+  html{-webkit-text-size-adjust:100%}
+  #app{height:100%;display:flex;flex-direction:column;align-items:center;gap:10px;box-sizing:border-box;overflow-y:auto;overflow-x:hidden;
+    padding:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))}
+  #app>:first-child{margin-top:auto}#app>:last-child{margin-bottom:auto}   /* центр по вертикали, но без обрезания, когда не помещается */
+  canvas{display:block;flex:none;max-width:100%;height:min(calc(100vh - 170px),calc(100dvh - 170px),calc((100vw - 16px) * 76 / 54));aspect-ratio:9/16;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.6);background:#0b0f14}
+  body:not(.record) canvas{aspect-ratio:54/76;object-fit:cover;object-position:50% 45%}   /* в живой версии обрезаем пустые поля сверху и снизу (кадр 1080x1920 остаётся прежним для роликов) */
+  #ui{display:flex;flex-direction:column;align-items:center;gap:8px;width:min(100%,420px)}
+  #btns button,#chat button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  #status{max-width:100%;overflow-wrap:anywhere}
+  @media (orientation:landscape) and (max-height:540px){   /* телефон на боку: игра слева, кнопки и чат справа */
+    #app{display:grid;grid-template-columns:auto minmax(0,380px);grid-template-rows:auto minmax(0,1fr);column-gap:16px;row-gap:8px;justify-content:center;align-content:center;align-items:start}
+    canvas{height:min(calc(100vh - 16px),calc(100dvh - 16px));grid-column:1;grid-row:1/span 2}
+    #ui{grid-column:2;grid-row:1;width:100%}
+  }
+  #btns{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;width:100%}
+  #btns button{font:700 22px system-ui,Arial,sans-serif;padding:12px 0;border-radius:14px;border:2px solid #2d3748;background:#10151c;color:#fff;cursor:pointer}
+  #btns button[data-d="1"]{color:#22c55e}
+  #btns button[data-d="-1"]{color:#ef4444}
+  #btns button.sel{border-color:#f5b83d;background:#241c0c}
+  #btns button:disabled{opacity:.45;cursor:default}
+  #status{min-height:22px;font-size:16px;opacity:.9;text-align:center}
+  #score{font-size:14px;opacity:.7}
+  #bot,#site{color:#f5b83d;font-weight:600;text-decoration:none;display:none;font-size:16px}
+  body.record{background:#000}
+  body.record #ui{display:none}
+  body.record #app{padding:0;height:auto;display:block}
+  body.record canvas{height:1920px;width:1080px;border-radius:0;box-shadow:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="c"></canvas>
+  <div id="ui">
+    <div id="btns"><button data-d="1">UP</button><button data-d="-1">DOWN</button></div>
+    <div id="status"></div>
+    <div id="score"></div>
+    <a id="bot" target="_blank" rel="noopener"></a>
+    <a id="site" target="_blank" rel="noopener"></a>
+  </div>
+</div>
+<script src="engine.js"></script>
+<script src="chat.js"></script>
+<script>
+(function(){
+'use strict';
+var W=540,H=960,S=2;
+var FONT='system-ui,"Segoe UI",Roboto,Arial,"Liberation Sans","DejaVu Sans",sans-serif';
+var BONUS='unlock the daily bonus';
+var BRAND_RE=/^coinplay\.com(\/[A-Za-z0-9_-]{1,24})?$/;  /* текст билборда: только coinplay.com или coinplay.com/метка */
+var UPC='#22c55e',DNC='#ef4444';
+
+/* Раунд = 14 секунд: 10 сек прогноз, 3 сек результат, 1 сек переход. График при этом не останавливается. */
+var EN=CPEngine;
+var P=EN.chart.P,PRED=EN.chart.PRED,SHOWEND=13,LOCK=EN.chart.LOCK;
+var CX=20,CY=215,CW=500,CH=375;      /* рамка графика */
+var XNOW=390,PXS=10.7,HIST=30,CD=0.75; /* "сейчас" на x=390, 10.7 px на секунду, свеча = 0.75 с */
+var PT=CY+78,PB=CY+CH-12;            /* зона цены по вертикали */
+
+var TXT={
+  ru:{q:'Выше или ниже линии?',hint:'Через 10 секунд. Пиши ВВЕРХ или ВНИЗ',up:'ВВЕРХ',down:'ВНИЗ',ans:'Итог:',win:'Угадал! +1',lose:'Мимо',bot:'Играть в боте'},
+  en:{q:'Above or below the line?',hint:'In 10 seconds. Comment UP or DOWN',up:'UP',down:'DOWN',ans:'Result:',win:'Nice! +1',lose:'Missed',bot:'Play in the bot'},
+  es:{q:'¿Sobre o bajo la línea?',hint:'En 10 segundos. Comenta SUBE o BAJA',up:'SUBE',down:'BAJA',ans:'Resultado:',win:'¡Acertaste! +1',lose:'Fallaste',bot:'Juega en el bot'},
+  pt:{q:'Acima ou abaixo da linha?',hint:'Em 10 segundos. Comente SOBE ou DESCE',up:'SOBE',down:'DESCE',ans:'Resultado:',win:'Acertou! +1',lose:'Errou',bot:'Jogue no bot'},
+  de:{q:'Über oder unter der Linie?',hint:'In 10 Sekunden. Kommentiere HOCH oder RUNTER',up:'HOCH',down:'RUNTER',ans:'Ergebnis:',win:'Treffer! +1',lose:'Daneben',bot:'Im Bot spielen'},
+  tr:{q:'Çizginin üstünde mi altında mı?',hint:'10 saniye sonra. YUKARI veya AŞAĞI yaz',up:'YUKARI',down:'AŞAĞI',ans:'Sonuç:',win:'Bildin! +1',lose:'Kaçırdın',bot:'Botta oyna'},
+  lv:{q:'Virs vai zem līnijas?',hint:'Pēc 10 sekundēm. Komentē AUGŠĀ vai LEJĀ',up:'AUGŠĀ',down:'LEJĀ',ans:'Rezultāts:',win:'Trāpīji! +1',lose:'Garām',bot:'Spēlē botā'},
+  lt:{q:'Virš ar po linija?',hint:'Po 10 sekundžių. Komentuok AUKŠTYN arba ŽEMYN',up:'AUKŠTYN',down:'ŽEMYN',ans:'Rezultatas:',win:'Atspėjai! +1',lose:'Neatspėjai',bot:'Žaisk bote'},
+  hr:{q:'Iznad ili ispod linije?',hint:'Za 10 sekundi. Komentiraj GORE ili DOLJE',up:'GORE',down:'DOLJE',ans:'Rezultat:',win:'Pogodak! +1',lose:'Promašaj',bot:'Igraj u botu'},
+  sr:{q:'Iznad ili ispod linije?',hint:'Za 10 sekundi. Komentariši GORE ili DOLE',up:'GORE',down:'DOLE',ans:'Rezultat:',win:'Pogodak! +1',lose:'Promašaj',bot:'Igraj u botu'}
+};
+var SKINS={
+  gold:{bg:'#0b0f14',panel:'#0a0e13',edge:'#2c3a4d',accent:'#f5b83d'},
+  cyan:{bg:'#070d14',panel:'#08101a',edge:'#25405a',accent:'#38d6f5'},
+  violet:{bg:'#0d0a16',panel:'#0e0a1a',edge:'#3a2f5a',accent:'#b27cff'},
+  mono:{bg:'#0f0f10',panel:'#0c0c0d',edge:'#3c3c40',accent:'#e5e7eb'}
+};
+var SKIN_NAMES=Object.keys(SKINS);
+
+var q=new URLSearchParams(location.search);
+var RECORD=q.get('mode')==='record';
+if(RECORD) document.body.classList.add('record');
+var cv=document.getElementById('c');
+var ctx=cv.getContext('2d');
+cv.width=W*S; cv.height=H*S;
+
+/* ---------- цена: бесконечная детерминированная функция времени ---------- */
+var hash=EN.hash,vnoise=EN.vnoise,price=EN.chart.price,roundInfo=EN.chart.roundInfo;
+function fmt(p){return p.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');}
+
+/* ---------- helpers ---------- */
+function rr(x,y,w,h,r){r=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();}
+function fillRR(x,y,w,h,r,c){ctx.fillStyle=c;rr(x,y,w,h,r);ctx.fill();}
+function fitText(str,weight,maxSize,maxW){var s=maxSize;ctx.font=weight+' '+s+'px '+FONT;var w=ctx.measureText(str).width;if(w>maxW){s=Math.floor(s*maxW/w);ctx.font=weight+' '+s+'px '+FONT;}return s;}
+function smooth(x){x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);}
+function line(x1,y1,x2,y2,w,c,dash,alpha){ctx.save();ctx.globalAlpha=alpha==null?1:alpha;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.lineWidth=w;ctx.strokeStyle=c;ctx.setLineDash(dash||[]);ctx.stroke();ctx.restore();}
+function bigText(str,x,y,size,alpha,fill){ctx.save();ctx.globalAlpha=alpha;ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='800 '+size+'px '+FONT;ctx.lineWidth=size*0.12;ctx.strokeStyle='#05070a';ctx.lineJoin='round';ctx.strokeText(str,x,y);ctx.fillStyle=fill||'#ffffff';ctx.fillText(str,x,y);ctx.restore();}
+/* единственная рекламная поверхность: билборд coinplay.com + строка про бонус */
+function billboard(sk,bonus,url){url=url||'coinplay.com';
+  var x=120,y=690,w=300,h=100;
+  fillRR(x+44,y+h-4,8,44,2,'#232b36');fillRR(x+w-52,y+h-4,8,44,2,'#232b36');
+  ctx.save();ctx.shadowColor=sk.accent;ctx.shadowBlur=22;fillRR(x,y,w,h,12,'#0a0d12');ctx.restore();
+  fillRR(x,y,w,h,12,'#0a0d12');
+  ctx.lineWidth=3;ctx.strokeStyle=sk.accent;rr(x,y,w,h,12);ctx.stroke();
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  fitText(url,'800',40,w-36);ctx.fillStyle='#ffffff';ctx.fillText(url,x+w/2,y+38);
+  ctx.fillStyle=sk.accent;ctx.fillRect(x+w/2-40,y+h/2+1,80,2);
+  fitText(bonus,'600',19,w-36);ctx.fillStyle=sk.accent;ctx.fillText(bonus,x+w/2,y+76);
+}
+
+/* ---------- scene / frame ---------- */
+var scene=null;
+function buildScene(seed,o){
+  o=o||{};
+  var r=mulberry32(((seed>>>0)^0x9e3779b9)>>>0);
+  var skin=(o.skin&&SKINS[o.skin])?o.skin:SKIN_NAMES[Math.floor(r()*SKIN_NAMES.length)];
+  return {seed:seed|0,skin:skin,T0:o.T0||0,lang:TXT[o.lang]?o.lang:'en',bonus:(o.bonus&&String(o.bonus).slice(0,40))||BONUS,url:(o.url&&BRAND_RE.test(String(o.url)))?String(o.url):'coinplay.com',pair:(o.pair&&String(o.pair))||'COIN/USDT'};
+}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+
+/* ---------- Чад: мини-персонаж у билборда. Он всегда «купил на уровне» (лонг): если итог ВНИЗ, плачет с пустыми карманами ---------- */
+var CHAD_SAY={
+  en:{up:'Chad is up. For now.',down:'I bought the top.'},
+  ru:{up:'Чад в плюсе. Пока.',down:'Я купил на пике.'},
+  es:{up:'Chad va ganando. Por ahora.',down:'Compré en el máximo.'}
+};
+function drawChad(cx,by,sc_,mood,t,say,accent){
+  /* mood: 0 уверен, 1 нервничает (последние 3 секунды), 2 радуется, 3 плачет. Координаты: ноги на (cx,by), рост около 100 */
+  ctx.save();ctx.translate(cx+(mood===3?Math.sin(t*38)*1.1:0),by+(mood===0?Math.sin(t*3)*1.2:0));ctx.scale(sc_,sc_);
+  var SKIN='#f0c8a0',SUIT='#1f2a44',HAIR='#2a2018';
+  /* ноги и ботинки */
+  ctx.fillStyle='#10131c';fillRR(-20,-8,17,8,3,'#10131c');fillRR(3,-8,17,8,3,'#10131c');
+  ctx.fillStyle='#161d33';ctx.fillRect(-17,-34,13,27);ctx.fillRect(4,-34,13,27);
+  /* пиджак */
+  ctx.fillStyle=SUIT;ctx.beginPath();ctx.moveTo(-30,-34);ctx.lineTo(-27,-62);ctx.quadraticCurveTo(0,-72,27,-62);ctx.lineTo(30,-34);ctx.closePath();ctx.fill();
+  /* рубашка и галстук */
+  ctx.fillStyle='#f4f6fa';ctx.beginPath();ctx.moveTo(-8,-66);ctx.lineTo(8,-66);ctx.lineTo(0,-40);ctx.closePath();ctx.fill();
+  ctx.fillStyle=accent;ctx.beginPath();ctx.moveTo(-3,-64);ctx.lineTo(3,-64);ctx.lineTo(4,-46);ctx.lineTo(0,-40);ctx.lineTo(-4,-46);ctx.closePath();ctx.fill();
+  /* карманы: у плачущего вывернуты наружу */
+  if(mood===3){ctx.fillStyle='#e8ecf4';ctx.beginPath();ctx.moveTo(-30,-40);ctx.lineTo(-20,-36);ctx.lineTo(-29,-28);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(30,-40);ctx.lineTo(20,-36);ctx.lineTo(29,-28);ctx.closePath();ctx.fill();}
+  /* руки */
+  ctx.fillStyle=SUIT;
+  if(mood===2){fillRR(-38,-64,10,28,5,SUIT);fillRR(28,-98,10,38,5,SUIT);ctx.fillStyle=SKIN;ctx.beginPath();ctx.arc(33,-102,6.5,0,6.3);ctx.fill();fillRR(31,-113,5,9,2.5,SKIN);}   /* большой палец вверх */
+  else if(mood===3){fillRR(-36,-76,9,24,4.5,SUIT);fillRR(27,-76,9,24,4.5,SUIT);ctx.fillStyle=SKIN;ctx.beginPath();ctx.arc(-24,-80,6,0,6.3);ctx.arc(24,-80,6,0,6.3);ctx.fill();}   /* кулаки у лица */
+  else{fillRR(-38,-64,10,28,5,SUIT);fillRR(28,-64,10,28,5,SUIT);ctx.fillStyle=SKIN;ctx.beginPath();ctx.arc(-33,-34,5,0,6.3);ctx.arc(33,-34,5,0,6.3);ctx.fill();}
+  /* шея и голова */
+  ctx.fillStyle=SKIN;ctx.fillRect(-6,-74,12,10);
+  ctx.beginPath();ctx.ellipse(0,-90,22,25,0,0,6.3);ctx.fill();
+  ctx.fillStyle='#e2b690';ctx.beginPath();ctx.arc(-22,-88,4,0,6.3);ctx.arc(22,-88,4,0,6.3);ctx.fill();   /* уши */
+  /* причёска: зачёс назад */
+  ctx.fillStyle=HAIR;ctx.beginPath();ctx.moveTo(-23,-92);ctx.quadraticCurveTo(-22,-122,2,-118);ctx.quadraticCurveTo(26,-116,23,-92);ctx.quadraticCurveTo(14,-106,0,-106);ctx.quadraticCurveTo(-14,-106,-23,-92);ctx.fill();
+  if(mood!==3){
+    /* солнечные очки */
+    ctx.fillStyle='#0a0c12';fillRR(-20,-96,18,11,4,'#0a0c12');fillRR(2,-96,18,11,4,'#0a0c12');ctx.fillRect(-3,-93,6,2.5);
+    ctx.strokeStyle='rgba(255,255,255,0.55)';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(-17,-93);ctx.lineTo(-12,-93);ctx.moveTo(5,-93);ctx.lineTo(10,-93);ctx.stroke();
+  }else{
+    /* без очков: красные глаза, брови домиком, слёзы */
+    ctx.fillStyle='#ffffff';ctx.beginPath();ctx.ellipse(-9,-92,6,6.5,0,0,6.3);ctx.ellipse(9,-92,6,6.5,0,0,6.3);ctx.fill();
+    ctx.strokeStyle='rgba(239,68,68,0.55)';ctx.lineWidth=1;ctx.stroke();
+    ctx.fillStyle='#1b2236';ctx.beginPath();ctx.arc(-9,-90,2.8,0,6.3);ctx.arc(9,-90,2.8,0,6.3);ctx.fill();
+    ctx.strokeStyle=HAIR;ctx.lineWidth=2.4;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-15,-101);ctx.lineTo(-5,-104);ctx.moveTo(15,-101);ctx.lineTo(5,-104);ctx.stroke();
+    for(var side=-1;side<=1;side+=2){
+      for(var q=0;q<3;q++){var ph=((t*1.6+q/3)%1);var ty=-86+ph*34,tx_=side*(11+ph*3);ctx.globalAlpha=1-ph*0.7;ctx.fillStyle='#5ec8ff';ctx.beginPath();ctx.ellipse(tx_,ty,2.2,3.4,0,0,6.3);ctx.fill();}
+    }
+    ctx.globalAlpha=1;
+  }
+  /* рот */
+  ctx.lineWidth=2.4;ctx.lineCap='round';ctx.strokeStyle='#7a3b2e';ctx.beginPath();
+  if(mood===3){ctx.fillStyle='#5a1f1f';ctx.ellipse(0,-72,7,4.5+Math.abs(Math.sin(t*9))*2,0,0,6.3);ctx.fill();}
+  else if(mood===2){ctx.moveTo(-10,-77);ctx.quadraticCurveTo(0,-64,10,-77);ctx.stroke();ctx.fillStyle='#fff';ctx.beginPath();ctx.moveTo(-8,-76);ctx.quadraticCurveTo(0,-69,8,-76);ctx.closePath();ctx.fill();}
+  else if(mood===1){ctx.moveTo(-9,-73);for(var w=0;w<6;w++)ctx.lineTo(-9+w*3.6+1.8,-73+(w%2?1.8:-1.8));ctx.stroke();}
+  else{ctx.moveTo(-8,-75);ctx.quadraticCurveTo(2,-70,10,-77);ctx.stroke();}
+  /* капля пота */
+  if(mood===1){var sp=(t*1.5)%1;ctx.globalAlpha=1-sp*0.6;ctx.fillStyle='#8fd8ff';ctx.beginPath();ctx.moveTo(24,-100+sp*12);ctx.quadraticCurveTo(29,-93+sp*12,24,-89+sp*12);ctx.quadraticCurveTo(19,-93+sp*12,24,-100+sp*12);ctx.fill();ctx.globalAlpha=1;}
+  /* искры радости */
+  if(mood===2){ctx.fillStyle='#ffe27a';for(var sI=0;sI<4;sI++){var a=sI*1.57+t*2,rx=Math.cos(a)*44,ry=-90+Math.sin(a)*34,r_=2.5+1.5*Math.sin(t*8+sI);ctx.beginPath();ctx.arc(rx,ry,r_,0,6.3);ctx.fill();}}
+  /* очки у ног плачущего */
+  if(mood===3){ctx.save();ctx.translate(34,-3);ctx.rotate(-0.25);ctx.fillStyle='#0a0c12';fillRR(-12,-4,10,6,2,'#0a0c12');fillRR(2,-4,10,6,2,'#0a0c12');ctx.fillRect(-2,-2,4,1.6);ctx.restore();}
+  ctx.restore();
+}
+
+/* ---------- режим «серия»: Чад с 3 жизнями проходит N раундов подряд (только для записи роликов) ---------- */
+var SER={
+  ru:{quit:'ты не можешь сдаться, когда даже Чад не сдался:',ask:'У Чада 3 жизни. Дотянет до конца?',win:'Чад выжил!',rekt:'Чад рект',rd:'раунд'},
+  en:{quit:"you can't quit when even Chad didn't:",ask:'Chad has 3 lives. Will he make it?',win:'Chad survived!',rekt:'Chad is rekt',rd:'round'},
+  es:{quit:'no te rindas, ni Chad se rindió:',ask:'Chad tiene 3 vidas. ¿Llegará al final?',win:'¡Chad sobrevivió!',rekt:'Chad está rekt',rd:'ronda'},
+  pt:{quit:'você não desiste quando até o Chad não desistiu:',ask:'Chad tem 3 vidas. Ele chega ao fim?',win:'Chad sobreviveu!',rekt:'Chad foi rekt',rd:'rodada'},
+  de:{quit:'du gibst nicht auf, wenn nicht mal Chad aufgegeben hat:',ask:'Chad hat 3 Leben. Schafft er es?',win:'Chad überlebt!',rekt:'Chad ist rekt',rd:'Runde'},
+  tr:{quit:'Chad bile pes etmediyse sen edemezsin:',ask:"Chad'in 3 canı var. Başarır mı?",win:'Chad hayatta!',rekt:'Chad rekt oldu',rd:'tur'},
+  lv:{quit:'tu nevari padoties, ja pat Čads nepadevās:',ask:'Čadam ir 3 dzīvības. Vai izturēs?',win:'Čads izdzīvoja!',rekt:'Čads ir rekt',rd:'raunds'},
+  lt:{quit:'negali pasiduoti, kai net Čadas nepasidavė:',ask:'Čadas turi 3 gyvybes. Ar ištvers?',win:'Čadas išgyveno!',rekt:'Čadas rekt',rd:'raundas'},
+  hr:{quit:'ne možeš odustati kad ni Chad nije odustao:',ask:'Chad ima 3 života. Hoće li izdržati?',win:'Chad je preživio!',rekt:'Chad je rekt',rd:'runda'},
+  sr:{quit:'ne možeš da odustaneš kad ni Chad nije odustao:',ask:'Chad ima 3 života. Hoće li izdržati?',win:'Chad je preživeo!',rekt:'Chad je rekt',rd:'runda'}
+};
+function heart(x,y,s){ctx.beginPath();ctx.moveTo(x,y+s*0.9);ctx.bezierCurveTo(x-s*1.3,y+s*0.1,x-s*0.7,y-s*0.8,x,y-s*0.2);ctx.bezierCurveTo(x+s*0.7,y-s*0.8,x+s*1.3,y+s*0.1,x,y+s*0.9);ctx.closePath();}
+function capLines(str,size,maxW){
+  ctx.font='800 '+size+'px '+FONT;
+  if(ctx.measureText(str).width<=maxW)return [str];
+  var w=str.split(' '),best=null,bi=1,i,a,b,m;
+  for(i=1;i<w.length;i++){a=ctx.measureText(w.slice(0,i).join(' ')).width;b=ctx.measureText(w.slice(i).join(' ')).width;m=Math.max(a,b);if(best===null||m<best){best=m;bi=i;}}
+  return [w.slice(0,bi).join(' '),w.slice(bi).join(' ')];
+}
+function drawSeries(T,r,u,seed,sk){
+  var S_=scene.series,t_=SER[scene.lang]||SER.en,n=S_.n,k=r-S_.r0,uu=u,i,inf;
+  if(k>=n){k=n-1;uu=P;} if(k<0){k=0;uu=0;}
+  var rev=uu>=PRED,before=S_.lives,cur=roundInfo(seed,S_.r0+k);
+  for(i=0;i<k;i++)if(roundInfo(seed,S_.r0+i).dir<0)before--;
+  var lost=rev&&cur.dir<0,now=before-(lost?1:0),last=(k===n-1);
+  /* рект-финал: красная виньетка */
+  if(last&&rev&&now<=0){ctx.save();ctx.globalAlpha=Math.min(1,(uu-PRED)/0.4)*(0.12+0.05*Math.sin(T*9));ctx.fillStyle='#ef4444';ctx.fillRect(0,0,W,H);ctx.restore();}
+  /* подпись-крючок над всем */
+  var cap=(S_.arc==='survive')?t_.quit:t_.ask,sz=25,ls=S_.hook?capLines(cap,sz,476):[];
+  if(ls.length>1){var m_=Math.max(ctx.measureText(ls[0]).width,ctx.measureText(ls[1]).width);if(m_>476)sz=Math.floor(sz*476/m_);}
+  ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='800 '+sz+'px '+FONT;ctx.lineJoin='round';ctx.lineWidth=6;
+  var y0=ls.length>1?56:70;
+  for(i=0;i<ls.length;i++){ctx.strokeStyle='rgba(0,0,0,0.85)';ctx.strokeText(ls[i],270,y0+i*(sz+3));ctx.fillStyle='#ffffff';ctx.fillText(ls[i],270,y0+i*(sz+3));}
+  /* жизни и номер раунда: справа вверху в рамке графика */
+  
+  for(i=0;i<S_.lives;i++){
+    var hx=CX+CW-100+i*40,hy=CY+46,alive=i<now,jus=(lost&&i===now&&uu-PRED<0.7);
+    if(alive){ctx.fillStyle='#ef4444';heart(hx,hy,15+(rev&&now===1&&last?1.2*Math.sin(T*10):0));ctx.fill();}
+    else if(jus){var a_=uu-PRED;ctx.save();ctx.globalAlpha=1-a_/0.7;ctx.translate(Math.sin(a_*60)*3,a_*14);ctx.fillStyle='#ef4444';heart(hx,hy,15*(1+a_*0.5));ctx.fill();ctx.restore();}
+    else{ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.lineWidth=2;heart(hx,hy,15);ctx.stroke();}
+  }
+  /* финальная карточка */
+  if(last&&uu>=PRED+0.25){
+    var ok=now>0,txt=ok?t_.win:t_.rekt,aa=smooth((uu-PRED-0.25)/0.35),col=ok?UPC:DNC;
+    ctx.save();ctx.globalAlpha=aa;fillRR(55,300,430,76,18,'rgba(8,11,16,0.92)');ctx.lineWidth=3;ctx.strokeStyle=col;rr(55,300,430,76,18);ctx.stroke();
+    ctx.textAlign='center';ctx.textBaseline='middle';fitText(txt,'800',42,392);ctx.fillStyle=col;ctx.fillText(txt,270,339);ctx.restore();
+  }
+}
+
+function draw(T){
+  var sc=scene,sk=SKINS[sc.skin],tx=TXT[sc.lang],seed=sc.seed;
+  var r=Math.floor(T/P),u=T-r*P,info=roundInfo(seed,r);
+  var reveal=u>=PRED&&u<P,i,k;
+  CH=sc.chad?375:520;PB=CY+CH-12;var NY=CY+Math.round(CH*0.773);
+  ctx.setTransform(S,0,0,S,0,0);
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle=sk.bg;ctx.fillRect(0,0,W,H);
+
+  /* шкала по вертикали: по последним 30 секундам */
+  var mn=1e9,mx=-1e9,p;
+  for(i=0;i<=150;i++){p=price(seed,T-HIST+i*0.2);if(p<mn)mn=p;if(p>mx)mx=p;}
+  p=price(seed,T);if(p<mn)mn=p;if(p>mx)mx=p;
+  var pad=Math.max(5,(mx-mn)*0.18),lo=mn-pad,hi=mx+pad;
+  function yOf(v){return PB-(v-lo)/(hi-lo)*(PB-PT);}
+
+  /* рамка */
+  fillRR(CX,CY,CW,CH,16,sk.panel);
+  ctx.lineWidth=2;ctx.strokeStyle=sk.edge;rr(CX,CY,CW,CH,16);ctx.stroke();
+  if(reveal){var wc=info.dir>0?UPC:DNC;ctx.save();ctx.globalAlpha=0.45+0.3*Math.sin((u-PRED)*7);ctx.lineWidth=3;ctx.strokeStyle=wc;rr(CX,CY,CW,CH,16);ctx.stroke();ctx.restore();}
+
+  /* сетка и подписи цены слева */
+  ctx.textAlign='left';ctx.textBaseline='middle';ctx.font='600 11px '+FONT;
+  for(i=0;i<5;i++){
+    var gy=PT+(PB-PT)*i/4,gv=hi-(hi-lo)*(PT>0?(gy-PT)/(PB-PT):0)-0;
+    gv=lo+(hi-lo)*(1-(gy-PT)/(PB-PT));
+    line(66,gy,CX+CW-8,gy,1,'#ffffff',null,0.06);
+    ctx.fillStyle='rgba(255,255,255,0.4)';ctx.fillText(gv.toFixed(1),CX+8,gy);
+  }
+
+  /* содержимое графика (обрезано рамкой) */
+  ctx.save();ctx.beginPath();ctx.rect(66,CY+3,CX+CW-66-3,CH-6);ctx.clip();
+  for(var m=Math.floor((T-HIST)/5);m<=Math.ceil((T+PRED)/5);m++){var gx=XNOW-(T-m*5)*PXS;line(gx,CY+4,gx,CY+CH-4,1,'#ffffff',null,0.05);}
+  /* свечи */
+  for(k=Math.floor((T-HIST-1)/CD);k<=Math.floor(T/CD);k++){
+    var s0=k*CD,e=Math.min((k+1)*CD,T);if(e-s0<0.02)continue;
+    var op=price(seed,s0),cl=price(seed,e),h_=Math.max(op,cl),l_=Math.min(op,cl),j,pp;
+    for(j=1;j<8;j++){pp=price(seed,s0+(e-s0)*j/8);if(pp>h_)h_=pp;if(pp<l_)l_=pp;}
+    var cx=XNOW-(T-(s0+CD/2))*PXS,col=cl>=op?UPC:DNC;
+    line(cx,yOf(h_),cx,yOf(l_),1.3,col);
+    var yo=yOf(op),yc=yOf(cl);ctx.fillStyle=col;ctx.fillRect(cx-3.4,Math.min(yo,yc),6.8,Math.max(1.5,Math.abs(yc-yo)));
+  }
+  /* линия-уровень и маркер экспирации */
+  var la=smooth(u/0.4)*(1-smooth(u-13));
+  if(la>0.01){
+    var yL=yOf(info.line),xS=XNOW-(T-info.t0)*PXS,xE=XNOW-(T-(info.t0+PRED))*PXS;
+    line(xS,yL,xE,yL,2.2,sk.accent,[8,6],la);
+    line(xE,CY+4,xE,CY+CH-4,1.5,'#ffffff',[4,5],0.5*la);
+    ctx.save();ctx.globalAlpha=la;fillRR(xE-17,CY+56,34,18,9,'rgba(255,255,255,0.12)');
+    ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='700 12px '+FONT;ctx.fillStyle='#ffffff';
+    ctx.fillText(u<PRED?(Math.ceil(PRED-u)+'s'):(info.dir>0?'▲':'▼'),xE,CY+65);ctx.restore();
+  }
+  /* текущая цена */
+  var yN=yOf(price(seed,T));
+  line(XNOW,yN,CX+CW-6,yN,1,'#ffffff',[3,5],0.3);
+  ctx.save();ctx.fillStyle='rgba(255,255,255,0.18)';ctx.beginPath();ctx.arc(XNOW,yN,5+2.5*Math.sin(T*6),0,6.3);ctx.fill();ctx.restore();
+  ctx.fillStyle='#ffffff';ctx.beginPath();ctx.arc(XNOW,yN,3.4,0,6.3);ctx.fill();
+  ctx.restore();
+
+  /* заголовок графика */
+  var cur=price(seed,T),prev=price(seed,T-HIST),chg=(cur-prev)/prev*100;
+  ctx.textAlign='left';ctx.textBaseline='middle';
+  ctx.font='700 13px '+FONT;ctx.fillStyle='rgba(255,255,255,0.55)';ctx.fillText(sc.pair,CX+14,CY+17);
+  if(sc.brand==='subtle'){var pw0=ctx.measureText(sc.pair).width;ctx.fillStyle='rgba(255,255,255,0.32)';ctx.fillText('·  '+sc.url,CX+14+pw0+8,CY+17);}
+  ctx.font='800 28px '+FONT;ctx.fillStyle='#ffffff';ctx.fillText(fmt(cur),CX+14,CY+43);
+  var pw=ctx.measureText(fmt(cur)).width;
+  ctx.font='700 14px '+FONT;ctx.fillStyle=chg>=0?UPC:DNC;ctx.fillText((chg>=0?'+':'')+chg.toFixed(2)+'%',CX+14+pw+10,CY+45);
+  if(la>0.01){ctx.save();ctx.globalAlpha=la;ctx.font='700 13px '+FONT;ctx.fillStyle=sk.accent;ctx.fillText('LEVEL '+fmt(info.line),CX+14,CY+63);ctx.restore();}
+
+  /* обратный отсчёт внутри графика */
+  if(u<PRED){
+    var n=Math.ceil(PRED-u),f=(u%1);
+    if(n<=3){bigText(String(n),150,NY,105*(1+0.4*Math.max(0,1-f*4)),1-f*0.35);}
+    else{ctx.save();ctx.globalAlpha=0.1;ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='800 110px '+FONT;ctx.fillStyle='#ffffff';ctx.fillText(String(n),150,NY);ctx.restore();}
+  }else if(u<SHOWEND+0.8){
+    var d=info.end-info.line,al=1-smooth((u-SHOWEND)/0.8);
+    bigText((d>=0?'+':'')+d.toFixed(2),170,NY,50,al*smooth((u-PRED)/0.25),d>=0?UPC:DNC);
+  }
+
+  /* кнопки UP / DOWN */
+  var by=CY+CH+16,bh=50;
+  for(i=0;i<2;i++){
+    var isUp=i===0,col2=isUp?UPC:DNC,bx=isUp?40:280,won=reveal&&((info.dir>0)===isUp);
+    ctx.save();ctx.globalAlpha=(reveal&&!won)?0.28:1;
+    fillRR(bx,by,220,bh,14,won?col2:'rgba(255,255,255,0.04)');
+    ctx.lineWidth=2.5;ctx.strokeStyle=col2;rr(bx,by,220,bh,14);ctx.stroke();
+    ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='800 24px '+FONT;ctx.fillStyle=won?'#06120a':col2;
+    ctx.fillText((isUp?'▲ ':'▼ ')+(isUp?tx.up:tx.down),bx+110,by+bh/2+1);
+    ctx.restore();
+  }
+  if(sc.brand==='billboard')billboard(sk,sc.bonus,sc.url);
+  /* Чад стоит слева от билборда, реплика над головой появляется с итогом */
+  var chadMood=reveal?(info.dir>0?2:3):(u>=PRED-3?1:0);
+  if(sc.chad)drawChad(66,820,0.9,chadMood,T,null,sk.accent);
+  if(reveal&&sc.chad){
+    var say=(CHAD_SAY[sc.lang]||CHAD_SAY.en)[info.dir>0?'up':'down'],ba=smooth((u-PRED)/0.3)*(1-smooth((u-SHOWEND)/0.8));
+    if(ba>0.01){ctx.save();ctx.globalAlpha=ba;ctx.font='700 12px '+FONT;var sz=fitText(say,'700',12,104);var bw=Math.min(112,ctx.measureText(say).width+14);fillRR(66-bw/2,664,bw,24,8,'rgba(255,255,255,0.94)');ctx.fillStyle='#0b0f14';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(say,66,676.5);ctx.restore();}
+  }
+
+  /* верхняя панель */
+  var l1,l2=null,c1='#ffffff';
+  if(reveal){l1=tx.ans+' '+(info.dir>0?tx.up:tx.down);c1=info.dir>0?UPC:DNC;}
+  else{l1=tx.q;l2=tx.hint;}
+  fillRR(30,104,480,92,18,'rgba(8,11,16,0.88)');
+  ctx.lineWidth=2;ctx.strokeStyle=sk.accent;rr(30,104,480,92,18);ctx.stroke();
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  if(l2===null){fitText(l1,'800',44,440);ctx.fillStyle=c1;ctx.fillText(l1,270,150);}
+  else{fitText(l1,'800',36,440);ctx.fillStyle=c1;ctx.fillText(l1,270,141);fitText(l2,'600',22,440);ctx.fillStyle=sk.accent;ctx.fillText(l2,270,177);}
+  if(sc.series)drawSeries(T,r,u,seed,sk);
+}
+
+/* ---------- API для рекордера ---------- */
+window.setup=function(o){
+  var seed=o.seed|0,rounds=Math.max(1,o.rounds|0||1),minm=(o.minmargin!=null)?+o.minmargin:(o.series?3:6),r0;
+  var arc=o.arc==='rekt'?'rekt':'survive',L=3;
+  if(o.series){
+    rounds=Math.max(3,Math.min(6,o.rounds|0||4));
+    /* ищем отрезок из N раундов: перед последним раундом у Чада ровно 1 жизнь, в последнем решается всё (UP — выжил, DOWN — рект) */
+    var fits=function(r){var lives=L,i,inf;for(i=0;i<rounds;i++){inf=roundInfo(seed,r+i);if(inf.margin<minm)return false;
+      if(i===rounds-1)return arc==='rekt'?(inf.dir<0&&lives===1):(inf.dir>0&&lives===1);
+      if(inf.dir<0)lives--; if(lives<=0)return false;} return false;};
+    if(o.round!=null)r0=+o.round;else{r0=3;while(r0<1500&&!fits(r0))r0++;if(r0>=1500)throw new Error('нет подходящей серии для seed '+seed);}
+  }else if(o.round!=null)r0=+o.round;
+  else{r0=3;
+    /* «напряжение»: на 8,5-й секунде цена по другую сторону линии от итога, итог ясный (разрыв не меньше minm) */
+    var tense=function(r){var inf=roundInfo(seed,r);if(inf.margin<Math.max(minm,4))return false;var d=price(seed,inf.t0+8.5)-inf.line;return (d>0)!==(inf.dir>0)&&Math.abs(d)>1;};
+    if(o.tension!==false){while(r0<1500&&!tense(r0))r0++;if(r0>=1500){r0=3;while(r0<400&&roundInfo(seed,r0).margin<minm)r0++;}}
+    else while(r0<400&&roundInfo(seed,r0).margin<minm)r0++;}
+  scene=buildScene(seed,{skin:o.skin,lang:o.lang,bonus:o.bonus,url:o.url,pair:o.pair,T0:r0*P});
+  if(o.series)scene.series={n:rounds,r0:r0,lives:L,arc:arc};
+  scene.chad=!!(o.series||o.chad);
+  scene.brand=(o.brand==='billboard'||o.brand==='off')?o.brand:'subtle';
+  if(scene.series)scene.series.hook=!!o.hook;
+  var tones=[],n;
+  for(n=0;n<rounds;n++){
+    var inf=roundInfo(seed,r0+n),b=n*P;
+    tones.push({f:1000,at:b+7,d:0.07},{f:1000,at:b+8,d:0.07},{f:1000,at:b+9,d:0.07});
+    if(inf.dir>0){tones.push({f:880,at:b+10,d:0.2},{f:1320,at:b+10.12,d:0.3});}
+    else{tones.push({f:392,at:b+10,d:0.25},{f:294,at:b+10.12,d:0.35});}
+  }
+  if(o.series){
+    var eb=(rounds-1)*P+10.4;
+    if(arc==='survive')tones.push({f:523,at:eb,d:0.18},{f:659,at:eb+0.16,d:0.18},{f:784,at:eb+0.32,d:0.18},{f:1047,at:eb+0.5,d:0.6});
+    else tones.push({f:247,at:eb,d:0.35},{f:220,at:eb+0.35,d:0.35},{f:196,at:eb+0.7,d:0.35},{f:147,at:eb+1.05,d:0.9});
+  }
+  var first=roundInfo(seed,r0);
+  return {bed:!!o.series,arc:o.series?arc:undefined,letter:o.series?(arc==='survive'?'SURVIVE':'REKT'):(first.dir>0?'UP':'DOWN'),skin:scene.skin,duration:rounds*P+1,tones:tones,round:r0,margin:+first.margin.toFixed(2)};
+};
+window.renderFrame=function(t){draw(scene.T0+t);};
+window.__ready=true;
+
+/* ---------- живая версия (24/7) ---------- */
+if(!RECORD){
+  var navLang=(navigator.language||'en').slice(0,2);
+  var lang=TXT[q.get('lang')]?q.get('lang'):'en';  /* пока всё на английском; другие языки только явно через ?lang= */
+  var seed0=q.get('seed')?(+q.get('seed')|0):EN.LIVE_SEED;  /* общий эфир всегда идёт на seed 1: ролики с --seeds 1 совпадают с ним по раундам */
+  var tx0=TXT[lang];
+  var statusEl=document.getElementById('status'),scoreEl=document.getElementById('score'),botEl=document.getElementById('bot');
+  var btns=Array.prototype.slice.call(document.querySelectorAll('#btns button'));
+  btns[0].textContent='▲ '+tx0.up;btns[1].textContent='▼ '+tx0.down;
+  /* --- трекинг и ссылки: bot и site принимают только разрешённые домены, src попадает в start-параметр бота и utm --- */
+  var GAME='chart';
+  var HOSTS={site:['coinplay.com'],bot:['t.me','telegram.me']};
+  var DEFAULT_BOT='';   /* например 'https://t.me/ваш_бот'; можно также передать ?bot= */
+  var HOOK='';          /* URL сборщика событий (Keitaro или свой эндпоинт); пусто = только window.dataLayer */
+  function clean(s){return String(s||'').replace(/[^A-Za-z0-9_-]/g,'_').slice(0,64);}
+  function safeUrl(u,hosts){try{var x=new URL(u);if(x.protocol!=='https:')return null;var h=x.hostname.toLowerCase();for(var i=0;i<hosts.length;i++){if(h===hosts[i]||h.slice(-hosts[i].length-1)==='.'+hosts[i])return x.href;}}catch(e){}return null;}
+  function withParam(u,k,v){var x=new URL(u);x.searchParams.set(k,v);return x.href;}
+  var src=clean(q.get('src')||'organic').slice(0,50);  /* запас под суффикс игры: start у Telegram не длиннее 64 */
+  var sp=src.split('_'),utmSrc=sp[0],utmCont=sp.slice(1).join('_');  /* tt_es1 -> source=tt, content=es1, как в редиректах из links.mjs */
+  function track(ev,data){
+    try{window.dataLayer=window.dataLayer||[];window.dataLayer.push({event:'cp_'+ev,cp_game:GAME,cp_src:src,cp_data:data||null});}catch(e){}
+    if(HOOK){try{navigator.sendBeacon(HOOK,JSON.stringify({ev:ev,game:GAME,src:src,data:data||null,ts:Date.now()}));}catch(e){}}
+  }
+  var BONUS_LBL={ru:'Бонус дня',en:'Daily bonus',es:'Bono diario',pt:'Bônus diário',de:'Tagesbonus',tr:'Günlük bonus',lv:'Dienas bonuss',lt:'Dienos bonusas',hr:'Dnevni bonus',sr:'Dnevni bonus'};
+  var siteEl=document.getElementById('site');
+  var botSafe=safeUrl(q.get('bot')||DEFAULT_BOT,HOSTS.bot);
+  if(botSafe){botEl.href=withParam(botSafe,'start',clean(src+'_'+GAME));botEl.textContent=tx0.bot;botEl.style.display='block';botEl.addEventListener('click',function(){track('cta_bot');});}
+  var siteSafe=safeUrl(q.get('site')||'https://coinplay.com',HOSTS.site)||'https://coinplay.com';
+  var siteHref=withParam(withParam(withParam(siteSafe,'utm_source',utmSrc),'utm_medium','game'),'utm_campaign',GAME);
+  siteEl.href=utmCont?withParam(siteHref,'utm_content',utmCont):siteHref;
+  siteEl.textContent=BONUS_LBL[lang]||BONUS_LBL.en;siteEl.style.display='block';siteEl.addEventListener('click',function(){track('cta_site');});
+  track('view');
+  var GTM_ID='';        /* контейнер GTM вида GTM-XXXXXXX; пусто = не загружать (события всё равно лежат в window.dataLayer) */
+  if(/^GTM-[A-Z0-9]{4,10}$/.test(GTM_ID)){window.dataLayer=window.dataLayer||[];window.dataLayer.push({'gtm.start':Date.now(),event:'gtm.js'});var gs=document.createElement('script');gs.async=true;gs.src='https://www.googletagmanager.com/gtm.js?id='+GTM_ID;document.head.appendChild(gs);}
+  var RG={ru:'Только 18+. Играйте ответственно.',en:'18+ only. Play responsibly.',es:'Solo +18. Juega con responsabilidad.',pt:'Apenas 18+. Jogue com responsabilidade.',de:'Nur ab 18. Spiele verantwortungsvoll.',tr:'Yalnızca 18+. Sorumlu oynayın.',lv:'Tikai 18+. Spēlē atbildīgi.',lt:'Tik 18+. Žaisk atsakingai.',hr:'Samo 18+. Igrajte odgovorno.',sr:'Samo 18+. Igrajte odgovorno.'};
+  /* --- очки на сервере: пока чат подключён к общему эфиру, прогнозы и результаты считает сервер --- */
+  var serverMode=false;
+  function applyPick(d){
+    if(choice!==0||(+d!==1&&+d!==-1))return;
+    if((nowT(P)-Math.floor(nowT(P)/P)*P)>=LOCK)return;
+    choice=+d;btns.forEach(function(b){if(+b.dataset.d===choice)b.classList.add('sel');});
+  }
+  function onSrvState(s){serverMode=!!(s.on&&s.scored&&!q.get('seed'));if(!serverMode)showScore();}
+  function onSrvResult(d){statusEl.textContent=d.win?tx0.win.replace('+1','+'+d.pts):tx0.lose;track('result',{win:d.win,pts:d.pts});}
+  function onSrvMe(d){scoreEl.textContent='★ '+d.pts+' · '+d.w+'/'+d.n+(d.streak>1?' · 🔥'+d.streak:'')+(d.rank?' · #'+d.rank:'');}
+  if(window.CPChat)CPChat.init({room:GAME+':'+lang,lang:lang,ph:(btns[0].textContent+' / '+btns[1].textContent+'…'),onEvent:track,onSkew:function(ms){synced=true;skew=ms/1000;},onState:onSrvState,onPick:applyPick,onResult:onSrvResult,onMe:onSrvMe});
+  var rgEl=document.createElement('div');rgEl.textContent=RG[lang]||RG.en;rgEl.style.cssText='text-align:center;font-size:12px;opacity:.55;margin:10px 0 4px;';document.body.appendChild(rgEl);
+  var stats={w:0,n:0};
+  try{var raw=localStorage.getItem('cpChart');if(raw)stats=JSON.parse(raw)||stats;}catch(e){}
+  stats={w:Math.max(0,+stats.w|0),n:Math.max(0,+stats.n|0)};if(stats.w>stats.n)stats.w=stats.n;  /* защита от битого localStorage */
+  function showScore(){scoreEl.textContent=stats.w+' / '+stats.n;}
+  function saveScore(){try{localStorage.setItem('cpChart',JSON.stringify(stats));}catch(e){}}
+  scene=buildScene(seed0,{skin:q.get('skin'),lang:lang,bonus:null,url:q.get('url'),pair:/^[A-Z0-9]{2,10}\/[A-Z0-9]{2,10}$/.test(q.get('pair')||'')?q.get('pair'):null});
+  scene.brand='subtle';
+  var startR=3,t0ms=performance.now(),lastRound=-1,choice=0,doneRound=-1;
+  /* --- общий эфир 24/7: без ?seed= у всех зрителей одно и то же время, один график и один раунд, как стрим ---
+     время считается от фиксированной даты по часам, а не от открытия страницы; с ?seed=N страница идёт приватно с нуля */
+  var SHARED=!q.get('seed'),EPOCH=EN.EPOCH,skew=0,synced=false;
+  function nowT(U){return SHARED?(Date.now()/1000+skew-EPOCH):3*U+(performance.now()-t0ms)/1000;}
+  if(SHARED&&location.protocol.indexOf('http')===0){  /* подстройка под часы сервера, чтобы кривые часы устройства не сдвигали эфир */
+    var ts=Date.now();
+    try{fetch(location.href,{method:'HEAD',cache:'no-store'}).then(function(r){var d=Date.parse(r.headers.get('Date')||'');if(d&&!synced){var mid=(ts+Date.now())/2;skew=(d-mid)/1000;}}).catch(function(){});}catch(e){}
+  }
+  showScore();
+  (function frame(){
+    var T=nowT(P);
+    var r=Math.floor(T/P),u=T-r*P;
+    if(r!==lastRound){lastRound=r;choice=0;btns.forEach(function(b){b.classList.remove('sel');b.disabled=false;});statusEl.textContent=tx0.hint;}
+    if(u>=LOCK)btns.forEach(function(b){b.disabled=true;});
+    if(u>=PRED&&doneRound!==r){
+      doneRound=r;
+      if(choice!==0&&!serverMode){stats.n++;if(choice===roundInfo(scene.seed,r).dir){stats.w++;statusEl.textContent=tx0.win;}else statusEl.textContent=tx0.lose;track('result',{w:stats.w,n:stats.n});saveScore();showScore();}
+    }
+    draw(T);
+    requestAnimationFrame(frame);
+  })();
+  btns.forEach(function(b){b.addEventListener('click',function(){
+    var T=nowT(P),u=T-Math.floor(T/P)*P;
+    if(u>=LOCK||choice!==0)return;
+    choice=+b.dataset.d;b.classList.add('sel');track('pick',{d:choice});if(serverMode)CPChat.pick(choice);
+  });});
+}
+})();
+</script>
+</body>
+</html>

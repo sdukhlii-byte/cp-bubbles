@@ -1,0 +1,26 @@
+{
+  "name": "coinplay-road",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "record": "node record.mjs",
+    "serve": "npx http-server . -p 8080",
+    "test": "node test.mjs",
+    "start": "node server.mjs",
+    "test:chat": "node test-chat.mjs",
+    "test:engine": "node test-engine.mjs",
+    "test:score": "node test-score.mjs",
+    "test:all": "node test.mjs && node test-engine.mjs && node test-layout.mjs && node test-chat.mjs && node test-score.mjs",
+    "test:layout": "node test-layout.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.0"
+  }
+}
