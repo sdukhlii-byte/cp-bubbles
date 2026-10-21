@@ -262,7 +262,7 @@ function prepare(cfg){
   var th=themeByName(cfg.skin)||RV.themeOf(cfg.seed|0);
   scene={theme:th,chars:RV.charsFor(names,cfg.seed|0),swear:swear,speech:[],pers:pers,deg:deg,seed:cfg.seed|0,simSeed:cfg.simSeed,skin:th.id,lang:'en',names:names,win:a.win,tf:a.tf,beat:beat,tstart:tstart,len:cfg.len,
     url:(cfg.url&&BRAND_RE.test(String(cfg.url)))?String(cfg.url):'coinplay.com',pick:-1,live:!!cfg.live};
-  if(cfg.warp){var gg=a.gap;scene.warp={a:Math.max(0.5,a.tf-0.8),L:1.0,f:gg<0.2?0.3:gg<0.45?0.38:0.5};scene.pfin=gg<0.45;}
+  if(cfg.warp){var wp=C.warpOf(a,!!cfg.live);scene.warp={a:wp.a,L:wp.L,f:wp.f};scene.pfin=wp.pfin;}
   sim=null;
   var s2=newSim(cfg.simSeed,deg);advance(s2,a.tf+0.2);
   var tEnd=a.tf+0.2,e,i;
@@ -342,7 +342,7 @@ function startLive(){
       b.classList.toggle('sel',pick===i);b.style.background=pick===i?COLORS[i]:'#10151c';}
   }
   function fallbackPlan(n){   /* сервера нет: считаем свою гонку из имён по умолчанию, очки не ведутся */
-    var names=pickNames({},mulberry32(n^0x51ed27)),it=C.planIter(n,names,{tmin:21,tmax:28,max:40});
+    var names=pickNames({},mulberry32(n^0x51ed27)),it=C.planIter(n,names,{tmin:21,tmax:26,max:40});
     cur.names=names;cur.fb=true;C.setLen(C.DEFLEN);LEN=C.DEFLEN;
     (function step(){if(cur.n!==n||cur.simSeed)return;it.next();if(it.done){cur.simSeed=it.best.simSeed;buildScene();}else setTimeout(step,0);})();
     buildScene(true);
@@ -350,7 +350,7 @@ function startLive(){
   function buildScene(provisional){
     if(!cur.names)return;
     var simSeed=cur.simSeed!=null?cur.simSeed:(cur.n*131+1);
-    var pr=prepare({names:cur.names,simSeed:simSeed,seed:cur.n,skin:skin,tstart:TSTART,beat:BEAT,swear:'bleep',url:'coinplay.com',len:C.DEFLEN,live:true});
+    var pr=prepare({names:cur.names,simSeed:simSeed,seed:cur.n,skin:skin,tstart:TSTART,beat:BEAT,swear:'bleep',url:'coinplay.com',len:C.DEFLEN,live:true,warp:true});
     scene.pick=pick;scene.provisional=!!provisional&&cur.simSeed==null;scene.noPanel=compact;
   }
   function newCycle(n){
@@ -390,7 +390,7 @@ function startLive(){
     if(!cur.names&&!serverMode&&Date.now()-firstAt>1500)fallbackPlan(n);
     if(!cur.names&&serverMode&&Date.now()-firstAt>6000)fallbackPlan(n);   /* сервер молчит: не оставляем пустой экран */
     if(scene&&scene.live){
-      var ui,tt=u-(START-TSTART),fin=TSTART+scene.tf;
+      var ui,tt=u-(START-TSTART),fin=TSTART+vtOf(scene.tf);
       var secs=Math.max(0,Math.ceil(LOCK-u));
       if(u<LOCK)ui={l1:pick>=0?'Your bet: '+cur.names[pick]:'Pick a racer',l2:'Bets close in '+secs+'s'};
       else if(u<START)ui={l1:pick>=0?'Your bet: '+cur.names[pick]:'Bets closed',l2:'Race starts now'};

@@ -44,7 +44,7 @@ ok(A.msgs.filter((m) => m.t === 'picked').length === 1, 'ставка после
 const an = RC.analyze(lock.simSeed, rA.names.map((n) => RC.persOf(n) === 'degen'));
 const end = await A.wait((m) => m.t === 'rend');
 ok(end && end.win === rA.names[an.win], `итог сервера = пересчёт клиента (${end && end.win})`);
-ok(end && Math.abs(end.tf - an.tf) < 1e-9 && end.tf >= 21 && end.tf <= 28.5, 'длительность гонки в окне 21–28 с: ' + (end && end.tf.toFixed(1)));
+ok(end && Math.abs(end.tf - an.tf) < 1e-9 && end.tf >= 21 && end.tf <= 26.5, 'длительность гонки в окне 21–26 с: ' + (end && end.tf.toFixed(1)));
 const res = await A.wait((m) => m.t === 'result' && m.game === 'race', 5000);
 ok(res && res.win === (rA.names[2] === end.win), 'результат ставки совпадает с победителем');
 // поздний вход получает состояние

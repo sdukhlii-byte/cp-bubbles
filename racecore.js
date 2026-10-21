@@ -165,14 +165,14 @@ function analyze(seed,deg){
 
 /* характеры: у каждого свои фразы и внешний вид. Для неизвестных имён (из чата) характер выбирается по хэшу имени */
 var PERS={
-  chad:{acc:'shades',lose:['nah. fine','fuck, again?','not like this'],win:['ez','too easy','gm king'],oops:['fuck. no','ratio\'d'],warp:['called it'],over:['sit down']},
-  degen:{acc:'band',lose:['fuck fuck fuck','double down'],win:['lol noob','all in baby'],oops:['shit.. all in again'],warp:['LFG'],allin:['ALL IN','SEND IT fuck'],over:['sent it']},
-  hodl:{acc:'gem',lose:['still holding','not selling fuck'],win:['diamond hands'],oops:['i hold anyway'],warp:['told u'],over:['hodl']},
-  pepe:{acc:'tears',lose:['feels bad man','fuck my life'],win:['ez win... wait'],oops:['of course','fuck'],warp:['wait what'],over:['sorry']},
-  whale:{acc:'spout',lose:['buy the fucking dip','small fish'],win:['splash'],oops:['dump it'],warp:['whale alert'],over:['move shrimp']},
-  wagmi:{acc:'smile',lose:['we r gonna make it','fuck.. wagmi'],win:['wagmi!'],oops:['still bullish'],warp:['wagmiii'],over:['gm gm']},
-  rekt:{acc:'xeyes',lose:['rekt.','fuck, again'],win:['wait, me?'],oops:['i knew it','fuck'],warp:['huh'],over:['oh?']},
-  bear:{acc:'ears',lose:['told u so','shit'],win:['bearish on u'],oops:['called it'],warp:['fuck no'],over:['grr']}
+  chad:{acc:'shades',lose:['nah. fine','fuck, again?','not like this','lag. 100% lag','who pushed me','temporary setback','it is fine. fine.','blame the mods'],win:['ez','too easy','gm king','built different','you are NPCs','skill issue','thanks for the liq'],oops:['fuck. no','ratio\'d','did not see that','that was on purpose'],warp:['called it','as planned','calculated'],over:['sit down'],idle:['gm','just vibing','another day, another W','i do this daily','cardio','my lambo is faster'],allin:['all in. obviously','SEND IT']},
+  degen:{acc:'band',lose:['fuck fuck fuck','double down','margin call incoming','i sold the bottom','mom, i lost the rent','wife is calling','x100 or nothing'],win:['lol noob','all in baby','leverage 100x','funded by your fear','touch grass'],oops:['shit.. all in again','rug. again','why am i like this'],warp:['LFG','x100 baby','ape in now'],allin:['ALL IN','SEND IT fuck','100x long','sold the car for this'],over:['sent it'],idle:['this is financial advice','who needs sleep','buying the top','liq price? never heard','one more trade']},
+  hodl:{acc:'gem',lose:['still holding','not selling fuck','it will recover','this is a dip','i will not sell','paper hands win today'],win:['diamond hands','held since 2017','never sold','told you to hold'],oops:['i hold anyway','buying more','i did not see it'],warp:['told u','patience','hodl pays'],over:['hodl'],idle:['hodl','not selling','zero thoughts, just hodl','see you at 100k','wen lambo? later'],allin:['hold the line']},
+  pepe:{acc:'tears',lose:['feels bad man','fuck my life','why always me','of course it is me','this is fine','the dip is mine'],win:['ez win... wait','feels good man','rare pepe energy','lol ok'],oops:['of course','fuck','classic me'],warp:['wait what','no way','am i winning?'],over:['sorry'],idle:['reeee','rare','just a frog','ribbit','sad but moving'],allin:['ribbit all in']},
+  whale:{acc:'spout',lose:['buy the fucking dip','small fish','i moved the market','just a shakeout','whale down'],win:['splash','sorry little ones','i own this pool','dumping on you'],oops:['dump it','accidental sell','slippage'],warp:['whale alert','market moved','buy wall up'],over:['move shrimp'],idle:['i have 10k btc','quiet whales','accumulating','watching the book','big wave coming'],allin:['market buy. all of it']},
+  wagmi:{acc:'smile',lose:['we r gonna make it','fuck.. wagmi','still bullish','this is just a pullback','wagmi anyway'],win:['wagmi!','we all win','love this community','gm gm'],oops:['still bullish','up only, right?','temporary'],warp:['wagmiii','told you we make it','to the moon'],over:['gm gm'],idle:['wagmi','lfg team','be nice frens','ngmi? no. wagmi','good vibes only'],allin:['believe!']},
+  rekt:{acc:'xeyes',lose:['rekt.','fuck, again','my portfolio is a ghost','liquidated again','rip'],win:['wait, me?','is this real','did i win?','must be a bug'],oops:['i knew it','fuck','of course'],warp:['huh','how','suspicious'],over:['oh?'],idle:['rekt','pain','i have seen things','ngmi','down bad'],allin:['why not']},
+  bear:{acc:'ears',lose:['told u so','shit','crash was inevitable','bear market, boys','worth zero anyway'],win:['bearish on u','everything is a scam','called the top','grr'],oops:['called it','as expected','this is the way down'],warp:['fuck no','dead cat bounce','it is a trap'],over:['grr'],idle:['it is going to zero','sell everything','winter is coming','bubble','short it'],allin:['short. all in']}
 };
 var PKEYS=['chad','degen','hodl','pepe','whale','wagmi','rekt','bear'];
 var PMAP={bitcoin:'chad',ethereum:'wagmi',solana:'degen',xrp:'whale',cardano:'hodl',tether:'hodl',bnb:'chad',ton:'wagmi',shiba:'pepe',avax:'bear',chainlink:'hodl',litecoin:'bear',moon:'wagmi',pepe:'pepe',rekt:'rekt',hodl:'hodl',wagmi:'wagmi',degen:'degen',chad:'chad',ape:'degen',bull:'wagmi',bear:'bear',gm:'wagmi',lambo:'chad',pump:'degen',dump:'rekt',whale:'whale',fomo:'degen',doge:'pepe',shib:'pepe',sats:'hodl',alpha:'chad'};
@@ -182,7 +182,9 @@ function persOf(name,used){
   return key;
 }
 function censor(txt,mode){return mode==='full'?txt:txt.replace(/fuck/g,'f*ck').replace(/shit/g,'sh*t');}
-var DEAD=['liquidated. fuck','rekt by a knife','i was winning fuck','this is bs'],KILL=['liquidated','nothing personal','sold the top','gotcha'],GOTK=['got the blade','sharp','come here','liquidating u'],SCAM=['it was a scam. fuck','free airdrop? fuck','clicked the link','my keys fuck'],RUG=['rugged','dev sold. fuck','hacked fuck','rug pull'],PUMPL=['to the moon','ETF approved','pump it','number go up'];
+var DEAD=['liquidated. fuck','rekt by a knife','i was winning fuck','this is bs','et tu, brute?','my bags!','tell my wife','not the knife','stop-loss hit','i bought the top','send help'],KILL=['liquidated','nothing personal','sold the top','gotcha','stop loss. yours','thanks for the liquidity','gg','just business','next','cut the losses'],GOTK=['got the blade','sharp','come here','liquidating u','who wants some','this is a limit order','free knife!','i am the whale now'],SCAM=['it was a scam. fuck','free airdrop? fuck','clicked the link','my keys fuck','seed phrase? sure!','verify your wallet.. oh no','fake site. again','guaranteed 10x, they said','wallet drained','phishing. i fell for it'],RUG=['rugged','dev sold. fuck','hacked fuck','rug pull','dev is gone','liquidity removed','honeypot','tokenomics were a lie','exit scam','audit? what audit'],PUMPL=['to the moon','ETF approved','pump it','number go up','elon tweeted','green candle!','breakout','inflow time','listing on binance','bull run baby'],
+REACT=['ouch','brutal','mods?','that was clean','who is next','not me please','i saw nothing','call the cops','respect','RIP','savage','hold my bags','did that just happen','knife meta is real'],
+IDLE=['gm','wen moon','this is fine','anyone has a charger','who is leading','nfa','buy high sell low','did i leave the oven on','funding is negative','gas is too high','my cousin knows a dev','up only','trust me bro','check my alpha','where is the finish','ser, this is a casino','vibes are bullish','bag secured'];
 function pick(arr,h){return arr[h%arr.length];}
 function speechList(ev2,ev3,mode,names,tEnd){
   /* реплики: обгон, портал, ALL IN. Проигравший ругается, выигравший подкалывает; текст берётся из характера шарика */
@@ -198,11 +200,21 @@ function speechList(ev2,ev3,mode,names,tEnd){
     e=ev3[i];if(e.t>tEnd||e.k==='boost')continue;h=((Math.floor(e.t*1000)*2246822519)^(e.id*40503)^(i*3266489917))>>>0;
     pr=PERS[persOf(names[e.id])];
     if(e.k==='allin')add(e.t,e.id,'win',pr.allin||pr.win,h);
-    else if(e.k==='stab'){add(e.t,e.v,'lose',DEAD,h);add(e.t+0.15,e.id,'win',KILL,h>>>4);}
+    else if(e.k==='stab'){add(e.t,e.v,'lose',DEAD,h);add(e.t+0.15,e.id,'win',KILL,h>>>4);var wi=(h>>>9)%8;if(wi!==e.v&&wi!==e.id&&names[wi]&&(h>>>3)%3!==0)add(e.t+0.6,wi,'win',REACT,h>>>11);}
     else if(e.k==='knife')add(e.t,e.id,'win',GOTK,h);
     else if(e.k==='scam')add(e.t,e.id,'lose',SCAM,h);
     else if(e.k==='warp')add(e.t,e.id,'win',pr.warp.concat(PUMPL),h);
     else add(e.t,e.id,'lose',pr.oops.concat(RUG),h);
+  }
+  /* болтовня между событиями: каждые ~2 с кто-то из живых говорит своё, не перебивая остальных */
+  var dead={};for(i=0;i<ev3.length;i++)if(ev3[i].k==='stab')dead[ev3[i].v]=ev3[i].t;
+  var tt,ci=0;for(tt=2.4;tt<tEnd-0.8;tt+=2.1){
+    h=((Math.floor(tt*1000)*2654435761)^(ci*40503))>>>0;ci++;var id=h%8,tries=0;
+    while(tries<8&&(dead[id]!==undefined&&dead[id]<=tt+1.1)){id=(id+1)%8;tries++;}
+    if(tries>=8||!names[id])continue;
+    var busy=false;for(i=0;i<out.length;i++)if(Math.abs(out[i].t-tt)<1.0||out[i].id===id&&Math.abs(out[i].t-tt)<2.0){busy=true;break;}
+    if(busy)continue;
+    var pi=PERS[persOf(names[id])];add(tt,id,'win',(h>>>7)%3===0?IDLE:pi.idle,h>>>13);
   }
   out.sort(function(a,b){return a.t-b.t;});
   return out;
@@ -225,6 +237,8 @@ function planIter(seed,names,o){
 }
 function plan(seed,names,o){var st=planIter(seed,names,o);while(!st.done)st.next();return {simSeed:st.best.simSeed,win:st.best.a.win,tf:st.best.a.tf,gap:st.best.a.gap,lc:st.best.a.lc,pc:st.best.a.pc,deg:st.deg,pers:st.pers,score:st.best.score};}
 
-g.CPRace={DEFLEN:DEFLEN,setLen:setLen,getLen:getLen,WW:WW,R:R,DT:DT,DEFNAMES:DEFNAMES,mulberry32:mulberry32,clamp:clamp,tri:tri,slx:slx,buildTrack:buildTrack,newSim:newSim,advance:advance,analyze:analyze,
+/* замедление перед финишем: live=true мягче, чтобы цикл 40 с не переполнялся */
+function warpOf(a,live){var gg=a.gap,L=live?0.9:1.0,f=live?(gg<0.2?0.45:gg<0.45?0.5:0.6):(gg<0.2?0.3:gg<0.45?0.38:0.5);return {a:Math.max(0.5,a.tf-0.8),L:L,f:f,pfin:gg<0.45,extra:L/f-L};}
+g.CPRace={warpOf:warpOf,DEFLEN:DEFLEN,setLen:setLen,getLen:getLen,WW:WW,R:R,DT:DT,DEFNAMES:DEFNAMES,mulberry32:mulberry32,clamp:clamp,tri:tri,slx:slx,buildTrack:buildTrack,newSim:newSim,advance:advance,analyze:analyze,
   PERS:PERS,persOf:persOf,censor:censor,speechList:speechList,planIter:planIter,plan:plan};
 })(typeof globalThis!=='undefined'?globalThis:this);

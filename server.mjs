@@ -37,7 +37,7 @@ const EN = engineCtx.CPEngine;
 const raceCtx = {};
 vm.runInNewContext(readFileSync(join(ROOT, 'racecore.js'), 'utf8'), raceCtx, { timeout: 1000 });
 const RC = raceCtx.CPRace;
-const RACE = { CYC: 40, LOCK: 7, START: 10, LEN: RC.DEFLEN, TMIN: 21, TMAX: 28, PTS: 7 };   // цикл 40 с: ставки до 7-й секунды, гонка с 10-й
+const RACE = { CYC: 40, LOCK: 7, START: 10, LEN: RC.DEFLEN, TMIN: 21, TMAX: 26, PTS: 7 };   // цикл 40 с: ставки до 7-й секунды, гонка с 10-й
 RC.setLen(RACE.LEN);
 const SCORED = ['chart', 'rekt', 'race'];  // для road очков нет: раунд там конечный и у каждого свой
 const GRACE = 0.35;                // запас секунд на задержку сети после закрытия приёма прогнозов
@@ -294,7 +294,7 @@ function raceBegin(n, late) {
 }
 function racePlanDone(r) {
   const b = r.it.best;
-  r.plan = { simSeed: b.simSeed, win: b.a.win, tf: b.a.tf, gap: b.a.gap };
+  r.plan = { simSeed: b.simSeed, win: b.a.win, tf: b.a.tf, gap: b.a.gap, extra: RC.warpOf(b.a, true).extra };
 }
 function raceTick() {
   const nowMs = Date.now(), n = raceCycle(nowMs);
@@ -306,7 +306,7 @@ function raceTick() {
     while (!race.plan) { race.it.next(); if (race.it.done) racePlanDone(race); }   // на случай, если перебор не успел (не больше 6 вариантов подряд)
     race.locked = true; raceBroadcast(raceLockMsg(race));
   }
-  if (race.locked && !race.ended && u >= RACE.START + race.plan.tf + 0.4) raceFinish(race);
+  if (race.locked && !race.ended && u >= RACE.START + race.plan.tf + race.plan.extra + 0.4) raceFinish(race);
 }
 function raceFinish(r) {
   if (r.ended) return; r.ended = true;
